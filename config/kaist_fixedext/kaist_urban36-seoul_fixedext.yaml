@@ -1,0 +1,73 @@
+%YAML:1.0
+---
+# explicit fixed extrinsic for urban36-seoul
+# source_csv: /mnt/sata4t/ivlab3_data/vins_project/results/fixed_extrinsic_best_available_fog/urban36-seoul/extrinsic_parameter.csv
+extrinsic_source: "explicit_fixedext_config"
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/imu/data_raw"
+image0_topic: "/stereo/left/image_raw"
+image1_topic: "/stereo/right/image_raw"
+output_path: "/mnt/sata4t/ivlab3_data/vins_project/results/vins_eval_results/KAIST_urban39_pankyo"
+pose_graph_save_path: "/mnt/sata4t/ivlab3_data/vins_project/results/vins_eval_results/KAIST_urban39_pankyo/pose_graph/"
+
+cam0_calib: "cam0_kaist.yaml"
+cam1_calib: "cam1_kaist.yaml"
+
+image_width: 1280
+image_height: 560
+
+use_gpu         : 0
+use_gpu_acc_flow: 0
+use_gpu_ceres   : 0
+
+# 先讓 VINS 以初值為中心去微調，不要先固定死
+estimate_extrinsic: 0
+
+# cam0：由 Vehicle2Stereo(以 left cam 為基準) 與 Vehicle2IMU 組出的初值
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 3.3945925445955871e-02, -4.3970008865161225e-02, 9.9845596420974703e-01, -2.9550762722180832e+00,
+       -9.9905920401584070e-01, -2.8470869778630226e-02, 3.2712634337262958e-02, -2.1336684621426496e+00,
+       2.6988534914899887e-02, -9.9862708149461188e-01, -4.4895112080284516e-02, 4.3929442069054231e-01,
+       0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00 ]
+
+# cam1：先用 cam0 + stereo baseline 做近似初值
+# 這只是初始化，不是最終真值
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 3.0637634622043164e-02, -3.9086374846581451e-02, 9.9876603398699870e-01, -2.9334119668087451e+00,
+       -9.9910437090410253e-01, -3.0374404355581142e-02, 2.9459321111680259e-02, -2.5518309501606380e+00,
+       2.9185465305244240e-02, -9.9877407398339901e-01, -3.9981967854524125e-02, 4.4615363521761542e-01,
+       0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00, 1.0000000000000000e+00 ]
+
+multiple_thread: 0
+
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 1
+flow_back: 1
+
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+acc_n: 0.1
+acc_w: 0.001
+gyr_n: 0.001
+gyr_w: 0.00001
+g_norm: 9.81007
+imu_noise_mode: "fog_xsens"
+
+estimate_td: 0
+td: 0.0
+
+load_previous_pose_graph: 0
+save_image: 1

@@ -1,0 +1,73 @@
+%YAML:1.0
+
+#common parameters
+#support: 1 imu 1 cam; 1 imu 2 cam: 2 cam;
+imu: 0
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+output_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/run002_stereo_only/"
+
+cam0_calib: "cam0_pinhole.yaml"
+cam1_calib: "cam1_pinhole.yaml"
+image_width: 752
+image_height: 480
+
+# Extrinsic parameter between IMU/body and Camera.
+# Note: body frame is treated as CARLA vehicle frame (X-fwd, Y-right, Z-up).
+# Camera optical frame is standard CV (X-right, Y-down, Z-forward).
+# Rotation R_body_cam = [[0,0,1],[1,0,0],[0,-1,0]] maps a vector in cam frame
+# (x_cam=right, y_cam=down, z_cam=forward) to body/vehicle (X_v=forward, Y_v=right, Z_v=up).
+# Translations: left cam at (1.5,-0.1,1.6), right cam at (1.5,0.1,1.6) in vehicle frame.
+# Result: cam1 lies at (+0.2, 0, 0) in cam0 frame = 0.20 m baseline along cam0 +X. (verified.)
+# extrinsic/frame convention is best-guess; will be re-checked after stereo run.
+estimate_extrinsic: 0
+
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0,-0.1,
+           0,-1, 0, 1.6,
+           0, 0, 0, 1   ]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0, 0.1,
+           0,-1, 0, 1.6,
+           0, 0, 0, 1   ]
+
+#Multiple thread support
+multiple_thread: 1
+
+#feature tracker parameters
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 0
+flow_back: 1
+
+#optimization parameters
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+#unsynchronization parameters
+estimate_td: 0
+td: 0.0
+
+#loop closure parameters
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/run002_stereo_only/pose_graph/"
+save_image: 0
+
+#visualization parameters
+visualize_imu_forward: 0
+visualize_camera_size: 0.4

@@ -1,0 +1,5 @@
+Forked from baseline ws /home/ivlab3/vins_ws
+baseline git commit: 94a200e2187bd488b4749946428ea6614698ccca
+baseline commit date: Thu Jun 4 19:23:36 2026 +0800
+fork date: 2026-06-12
+packages: vins, loop_fusion, camera_models, kaist_player (+ config/kaist_fixedext)

@@ -1,0 +1,76 @@
+%YAML:1.0
+# ===========================================================================
+# carla_stereo_imu_R1.yaml (R-sweep det+1; PURPOSE: PROPER det=+1 right-handed body_T_cam extrinsic; pair with replay --variant proper_yref)
+# PURPOSE: stereo + IMU baseline. VINS config is identical for every IMU-fix
+#          variant (raw / skip_imu_head / drop_spike / *flip / *gravity) — the
+#          IMU fix is applied in the REPLAY script, not here. Use this same
+#          config with each replay variant to isolate the IMU effect.
+# Extrinsics + g_norm match meta.json (CARLA Town03, IMU at vehicle z=1.6,
+# cameras at x=1.5 z=1.6, baseline 0.2 m, gravity +Z 9.81).
+# output_path / pose_graph_save_path are rewritten per-run by the batch runner.
+# ===========================================================================
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+
+output_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/debug_variants/_PLACEHOLDER/"
+
+cam0_calib: "cam0_pinhole.yaml"
+cam1_calib: "cam1_pinhole.yaml"
+image_width: 752
+image_height: 480
+
+use_gpu         : 0
+use_gpu_acc_flow: 0
+use_gpu_ceres   : 0
+
+# fixed extrinsic (camera optical -> IMU/body). Translation = cam - imu (meta.json).
+estimate_extrinsic: 1
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           -1, 0, 0, 0.1,
+           0, -1, 0, 0.0,
+           0, 0, 0, 1   ]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           -1, 0, 0,-0.1,
+           0, -1, 0, 0.0,
+           0, 0, 0, 1   ]
+
+multiple_thread: 1
+max_cnt: 250
+min_dist: 15
+freq: 10
+F_threshold: 3.0
+show_track: 0
+flow_back: 1
+
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+acc_n: 0.1
+gyr_n: 0.01
+acc_w: 0.001
+gyr_w: 0.0001
+g_norm: 9.81
+
+estimate_td: 1
+td: 0.0
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/debug_variants/_PLACEHOLDER/pose_graph/"
+save_image: 0
+visualize_imu_forward: 0
+visualize_camera_size: 0.4
+save_reliability_features: 1
+reliability_log_every_n: 1

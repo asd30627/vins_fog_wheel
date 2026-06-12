@@ -1,0 +1,85 @@
+%YAML:1.0
+
+#common parameters
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+output_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/run002_stereo_imu_initial/"
+
+cam0_calib: "cam0_pinhole.yaml"
+cam1_calib: "cam1_pinhole.yaml"
+image_width: 752
+image_height: 480
+
+# GPU acceleration
+use_gpu         : 0
+use_gpu_acc_flow: 0
+use_gpu_ceres   : 0
+
+# Extrinsic between body (= CARLA vehicle frame: X-fwd, Y-right, Z-up) and camera.
+# IMU is at (0,0,1.6) in vehicle frame. Cameras at (1.5,±0.1,1.6).
+# Body assumed coincident with IMU; therefore translation from body to camera is
+# (1.5, ±0.1, 0) (cameras 1.5 m forward, ±0.1 m lateral, same height as IMU).
+# NOTE: CARLA's IMU axis convention may not match VINS expectation (VINS expects
+# accelerometer reporting gravity as +z when stationary in body frame). This config
+# is a best-guess first iteration; if INIT fails or z-axis drifts, revisit
+# body↔IMU rotation. extrinsic/frame convention IS NOT YET CONFIRMED.
+estimate_extrinsic: 0
+
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0,-0.1,
+           0,-1, 0, 0.0,
+           0, 0, 0, 1   ]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0, 0.1,
+           0,-1, 0, 0.0,
+           0, 0, 0, 1   ]
+
+#Multiple thread support
+multiple_thread: 1
+
+#feature tracker parameters
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 0
+flow_back: 1
+
+#optimization parameters
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+# IMU parameters: CARLA "ideal_first_test" IMU has near-zero noise, but giving VINS
+# very small sigmas can make it over-trust IMU; keep moderate (simulation_config-ish).
+acc_n: 0.1          # accelerometer noise std
+gyr_n: 0.01         # gyroscope noise std
+acc_w: 0.001        # accelerometer bias random walk
+gyr_w: 0.0001       # gyroscope bias random walk
+g_norm: 9.81        # CARLA gravity is 9.81
+
+#unsynchronization parameters
+estimate_td: 0
+td: 0.0
+
+#loop closure parameters
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/datasets/carla_vins/vins_runs/run002_stereo_imu_initial/pose_graph/"
+save_image: 0
+
+#visualization parameters
+visualize_imu_forward: 0
+visualize_camera_size: 0.4
