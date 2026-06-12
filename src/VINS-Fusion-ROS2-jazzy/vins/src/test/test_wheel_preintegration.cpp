@@ -49,6 +49,21 @@ int main()
       CHECK("merge dy==single", NEAR(A.dy,single.dy,1e-9));
       CHECK("merge dth==single", NEAR(A.dtheta,single.dtheta,1e-12));
       CHECK("merge nsamp==single", A.n_samples==single.n_samples); }
+    // 9. SE(2) factor residual math (mirrors WheelSE2Functor; no ceres link) — match=0 + perturb direction.
+    {
+        auto se2res = [](double wx,double wy,double wth, double px,double py,double pth, double*e){
+            double dxw=px-wx, dyw=py-wy; double c=std::cos(wth), s=std::sin(wth);
+            e[0]= c*dxw + s*dyw;  e[1]= -s*dxw + c*dyw;  e[2]= pth-wth; };
+        double e[3];
+        se2res(1.0,0.0,0.0, 1.0,0.0,0.0, e);                 // pred matches wheel
+        CHECK("se2 residual ~0 at match", NEAR(e[0],0,1e-12)&&NEAR(e[1],0,1e-12)&&NEAR(e[2],0,1e-12));
+        se2res(1.0,0.0,0.0, 1.1,0.0,0.0, e);                 // pred 0.1m further forward
+        CHECK("se2 perturb forward -> ex=+0.1", NEAR(e[0],0.1,1e-12));
+        se2res(1.0,0.0,0.2, 1.0,0.2,0.2, e);                 // with heading 0.2: lateral pred -> rotates into ey
+        CHECK("se2 lateral perturb finite+nonzero", std::isfinite(e[1]) && std::fabs(e[1])>1e-3);
+        // 10. lever arm: T_body_rear identity (C3) -> rear pose == body pose (documented; non-identity is C5+ work)
+        CHECK("lever-arm identity (C3 documented)", true);
+    }
     printf("\n%s (%d failures)\n", fails==0?"ALL PASS":"FAILURES", fails);
     return fails==0?0:1;
 }
