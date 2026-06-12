@@ -41,6 +41,7 @@
 #include "../factor/fog_rotation_factor.h"      // P1 (fwvio) explicit factors
 #include "../factor/wheel_forward_factor.h"
 #include "../factor/nhc_factor.h"
+#include "../factor/wheel_preintegration.h"     // P1-Wheel v3.3 SE(2) preintegration
 #include "../featureTracker/feature_tracker.h"
 #include "reliability_logger.h"
 #include <string>
@@ -239,6 +240,12 @@ class Estimator
     double Headers[(WINDOW_SIZE + 1)];
 
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
+    // P1-Wheel v3.3 C2: immutable SE(2) wheel preintegration per keyframe interval (mirrors pre_integrations).
+    WheelPreintegration *wheel_pre_integrations[(WINDOW_SIZE + 1)] = {nullptr};
+    bool wheelAvailable(double t);
+    void buildWheelPreint(int idx, double t0, double t1);
+    // frozen WHEEL_MODEL.md params (YAML-overridden in C3)
+    double wheel_b_ = 1.52439, wheel_sigmaL_ = 0.02, wheel_sigmaR_ = 0.02, wheel_yaw_scale_ = 1.0, wheel_huber_ = 1.0;
     Vector3d acc_0, gyr_0;
 
     vector<double> dt_buf[(WINDOW_SIZE + 1)];

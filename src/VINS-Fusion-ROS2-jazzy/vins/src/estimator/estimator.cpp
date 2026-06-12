@@ -1024,6 +1024,30 @@ double Estimator::integrateWheel(double ti, double tj, double &dl_out, double &d
     return sf;
 }
 
+// P1-Wheel v3.3 C2: latest raw wheel stamp reaches t? (coverage-wait predicate; B0 never calls this)
+bool Estimator::wheelAvailable(double t)
+{
+    mWheel.lock();
+    bool ok = !wheel_buffer.empty() && wheel_buffer.back().timestamp >= t;
+    mWheel.unlock();
+    return ok;
+}
+
+// Build the immutable SE(2) preintegration for interval (t0, t1] into slot idx. n=0 -> valid=false.
+void Estimator::buildWheelPreint(int idx, double t0, double t1)
+{
+    delete wheel_pre_integrations[idx];
+    WheelPreintegration *wp = new WheelPreintegration(wheel_b_, wheel_sigmaL_, wheel_sigmaR_);
+    wp->t_start = t0; wp->t_end = t1;
+    mWheel.lock();
+    for (const auto &w : wheel_buffer)
+        if (w.timestamp > t0 && w.timestamp <= t1)
+            wp->addSample(w.delta_left, w.delta_right);
+    mWheel.unlock();
+    wp->valid = (wp->n_samples > 0);
+    wheel_pre_integrations[idx] = wp;
+}
+
 void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame)
 {
     ROS_ERROR("deprecated at VINS-Fusion");
@@ -1105,18 +1129,25 @@ void Estimator::processMeasurements()
             // ============================================================
             // 2. 等 IMU buffer 裡面有足夠資料可以覆蓋這一幀時間
             // ============================================================
+            // P1-Wheel v3.3 C2: coverage-wait incl. wheel (only when WHEEL_FACTOR_ENABLE); 0.5s wall timeout.
+            int wheel_wait_ms = 0; bool wheel_timed_out = false;
             while(1)
             {
-                if ((!USE_IMU || IMUAvailable(feature.first + td)))
+                bool imu_ok = (!USE_IMU || IMUAvailable(feature.first + td));
+                bool wheel_ok = (!WHEEL_FACTOR_ENABLE) || wheelAvailable(feature.first + td) || wheel_timed_out;
+                if (imu_ok && wheel_ok)
                     break;
                 else
                 {
-                    printf("wait for imu ... \n");
+                    if (!imu_ok) printf("wait for imu ... \n");
                     if (!MULTIPLE_THREAD)
                         return;
-
                     std::chrono::milliseconds dura(5);
                     std::this_thread::sleep_for(dura);
+                    if (WHEEL_FACTOR_ENABLE && !wheel_ok && imu_ok) {
+                        wheel_wait_ms += 5;
+                        if (wheel_wait_ms >= 500) { wheel_timed_out = true; printf("[WHEEL] coverage-wait TIMEOUT 0.5s @t=%.4f -> interval invalid\n", feature.first); }
+                    }
                 }
             }
 
@@ -1450,6 +1481,9 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("Solving %d", frame_count);
     ROS_DEBUG("number of feature: %d", f_manager.getFeatureCount());
     Headers[frame_count] = header;
+    // P1-Wheel v3.3 C2: freeze the SE(2) wheel preintegration for interval (Headers[fc-1], Headers[fc]].
+    if (WHEEL_FACTOR_ENABLE && frame_count > 0)
+        buildWheelPreint(frame_count, Headers[frame_count - 1], Headers[frame_count]);
 
     ImageFrame imageframe(image, header);
     imageframe.pre_integration = tmp_pre_integration;
@@ -2780,6 +2814,7 @@ void Estimator::slideWindow()
                 if(USE_IMU)
                 {
                     std::swap(pre_integrations[i], pre_integrations[i + 1]);
+                    if (WHEEL_FACTOR_ENABLE) std::swap(wheel_pre_integrations[i], wheel_pre_integrations[i + 1]);  // P1-Wheel
 
                     dt_buf[i].swap(dt_buf[i + 1]);
                     linear_acceleration_buf[i].swap(linear_acceleration_buf[i + 1]);
@@ -2808,6 +2843,7 @@ void Estimator::slideWindow()
                 linear_acceleration_buf[WINDOW_SIZE].clear();
                 angular_velocity_buf[WINDOW_SIZE].clear();
             }
+            if (WHEEL_FACTOR_ENABLE) { delete wheel_pre_integrations[WINDOW_SIZE]; wheel_pre_integrations[WINDOW_SIZE] = nullptr; }  // P1-Wheel
 
             if (true || solver_flag == INITIAL)
             {
@@ -2827,6 +2863,12 @@ void Estimator::slideWindow()
             Headers[frame_count - 1] = Headers[frame_count];
             Ps[frame_count - 1] = Ps[frame_count];
             Rs[frame_count - 1] = Rs[frame_count];
+
+            // P1-Wheel v3.3 C2: MARGIN_SECOND_NEW two-segment SE(2) composition (mirror of IMU push_back below).
+            if (WHEEL_FACTOR_ENABLE && wheel_pre_integrations[frame_count - 1] && wheel_pre_integrations[frame_count]) {
+                wheel_pre_integrations[frame_count - 1]->merge(*wheel_pre_integrations[frame_count]);
+                delete wheel_pre_integrations[frame_count]; wheel_pre_integrations[frame_count] = nullptr;
+            }
 
             if(USE_IMU)
             {
