@@ -57,6 +57,9 @@ target_link_libraries(vins_lib  ${OpenCV_LIBS} ${CERES_LIBRARIES})
 
 ament_target_dependencies(vins_lib rclcpp rcpputils std_msgs visualization_msgs geometry_msgs nav_msgs tf2 tf2_ros cv_bridge camera_models image_transport)
 
+add_executable(test_wheel src/test/test_wheel_preintegration.cpp)
+target_include_directories(test_wheel PRIVATE ${EIGEN3_INCLUDE_DIR})
+
 add_executable(vins_node src/rosNodeTest.cpp)
 ament_target_dependencies(vins_node rclcpp rcpputils std_msgs visualization_msgs geometry_msgs nav_msgs tf2 tf2_ros cv_bridge camera_models image_transport)
 target_link_libraries(vins_node vins_lib) 
