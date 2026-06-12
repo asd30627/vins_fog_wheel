@@ -115,7 +115,6 @@ class Estimator
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
     void inputIMU(double t, const Vector3d &linearAcceleration, const Vector3d &angularVelocity);
     void inputWheel(double t, double dl, double dr, double df);   // P1-Wheel
-    double integrateWheel(double ti, double tj, double &dl_out, double &dr_out, int &nsamp);  // (ti,tj] forward dist
     void inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame);
     void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
@@ -348,8 +347,6 @@ class Estimator
     // ===== P1 (fwvio) factor data buffers — keyed by keyframe index j (rel to i=j-1).
     // Filled by the player->estimator FOG/wheel plumbing (P1 Task 2). Empty => factor guards skip,
     // so flag-ON is a safe no-op until plumbing lands; flag-OFF (default) = baseline unchanged.
-    std::map<int, Eigen::Quaterniond> fog_dR_buf;   // FOG SO(3) increment R_i->R_j
-    std::map<int, double> wheel_ds_buf;             // wheel forward displacement i->j [m]
 
     double pending_gyro_raw_delta_angle_deg;
     double pending_gyro_raw_rotvec_x_deg;
