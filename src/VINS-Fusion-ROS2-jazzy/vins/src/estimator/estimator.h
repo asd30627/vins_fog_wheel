@@ -42,6 +42,7 @@
 #include "../factor/wheel_forward_factor.h"
 #include "../factor/nhc_factor.h"
 #include "../factor/wheel_preintegration.h"     // P1-Wheel v3.3 SE(2) preintegration
+#include "../factor/wheel_se2_factor.h"
 #include "../featureTracker/feature_tracker.h"
 #include "reliability_logger.h"
 #include <string>

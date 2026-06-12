@@ -58,6 +58,7 @@ int POSE_COV_EVERY_N = 1;
 int FOG_FACTOR_ENABLE = 0;
 int WHEEL_FACTOR_ENABLE = 0;
 int NHC_ENABLE = 0;
+int WHEEL_MODE_SE2 = 1;   // 1=SE(2) default, 0=forward_only ablation (env WHEEL_MODE)
 map<int, Eigen::Vector3d> pts_gt;
 std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK;
@@ -219,7 +220,10 @@ void readParameters(std::string config_file)
       if ((e=getenv("FOG_FACTOR_ENABLE")))   FOG_FACTOR_ENABLE   = atoi(e);
       if ((e=getenv("WHEEL_FACTOR_ENABLE"))) WHEEL_FACTOR_ENABLE = atoi(e);
       if ((e=getenv("NHC_ENABLE")))          NHC_ENABLE          = atoi(e); }
-    ROS_WARN("P1 factors: FOG=%d WHEEL=%d NHC=%d", FOG_FACTOR_ENABLE, WHEEL_FACTOR_ENABLE, NHC_ENABLE);
+    { const char *m = getenv("WHEEL_MODE");
+      if (m) WHEEL_MODE_SE2 = (std::string(m) == "forward_only") ? 0 : 1; }
+    ROS_WARN("P1 factors: FOG=%d WHEEL=%d (mode=%s) NHC=%d", FOG_FACTOR_ENABLE, WHEEL_FACTOR_ENABLE,
+             WHEEL_MODE_SE2 ? "se2" : "forward_only", NHC_ENABLE);
 
     USE_GPU = fsSettings["use_gpu"];
     USE_GPU_ACC_FLOW = fsSettings["use_gpu_acc_flow"];

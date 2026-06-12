@@ -2344,31 +2344,49 @@ void Estimator::optimization()
                                          para_Pose[i], para_Pose[j]);
             }
         }
-        if (WHEEL_FACTOR_ENABLE) {
-            // variance model (urban28-frozen): sigma_w^2 = WHEEL_SIGMA0_2 + ks|ds| + kpsi|dpsi|.
-            const double WHEEL_SIGMA0_2 = 1.0e-3, WHEEL_KS = 0.0, WHEEL_KPSI = 0.0;
-            const double WHEEL_TURN_SKIP_DEG = 10.0;   // arc/chord + lever-arm breaks down on sharp turns -> skip
-            int wf_cnt = 0, wf_nodata = 0, wf_turn = 0;
-            std::vector<double> raw_res, norm_res;
+        if (WHEEL_FACTOR_ENABLE && WHEEL_MODE_SE2) {
+            // SE(2) wheel factor on the immutable preintegration (C3). Translation rows primary; yaw inflated loose.
+            int wf_cnt = 0, wf_invalid = 0, wf_huber = 0;
+            std::vector<double> rx, ry, ryaw, nx, ny;
             for (int i = 0; i < frame_count; i++) {
-                int j = i + 1; double dl, dr; int ns;
-                double ds = integrateWheel(Headers[i], Headers[j], dl, dr, ns);
-                if (ns == 0) { wf_nodata++; continue; }
-                double dpsi = std::fabs(Utility::R2ypr(Rs[i].transpose() * Rs[j]).x());  // |yaw change| deg
-                if (dpsi > WHEEL_TURN_SKIP_DEG) { wf_turn++; continue; }
-                double var = WHEEL_SIGMA0_2 + WHEEL_KS * std::fabs(ds) + WHEEL_KPSI * dpsi;
-                problem.AddResidualBlock(WheelForwardFunctor::Create(ds, var), NULL,
-                                         para_Pose[i], para_Pose[j]);
+                int j = i + 1;
+                WheelPreintegration *wp = wheel_pre_integrations[j];
+                if (!wp || !wp->valid) { wf_invalid++; continue; }
+                Eigen::Matrix3d cov = wp->cov;
+                cov(2,2) *= (wheel_yaw_scale_ * wheel_yaw_scale_);     // loosen yaw row
+                cov += 1e-9 * Eigen::Matrix3d::Identity();             // PD floor
+                Eigen::Matrix3d sqrt_info = Eigen::LLT<Eigen::Matrix3d>(cov.inverse()).matrixL().transpose();
+                problem.AddResidualBlock(WheelSE2Functor::Create(wp->dx, wp->dy, wp->dtheta, sqrt_info),
+                                         new ceres::HuberLoss(wheel_huber_), para_Pose[i], para_Pose[j]);
                 wf_cnt++;
-                double rb = (Rs[i].transpose() * (Ps[j] - Ps[i])).x() - ds;
-                raw_res.push_back(rb); norm_res.push_back(rb / std::sqrt(var));
+                // raw per-axis residual at current state (diagnostic)
+                Eigen::Vector3d dp = Rs[i].transpose() * (Ps[j] - Ps[i]);
+                double pth = Utility::R2ypr(Rs[i].transpose() * Rs[j]).x() * M_PI / 180.0;
+                double cw = std::cos(wp->dtheta), sw = std::sin(wp->dtheta);
+                double ex =  cw*(dp.x()-wp->dx) + sw*(dp.y()-wp->dy);
+                double ey = -sw*(dp.x()-wp->dx) + cw*(dp.y()-wp->dy);
+                rx.push_back(std::fabs(ex)); ry.push_back(std::fabs(ey)); ryaw.push_back(std::fabs(pth-wp->dtheta));
+                double n = (sqrt_info * Eigen::Vector3d(ex,ey,pth-wp->dtheta)).norm();
+                nx.push_back(n); if (n > wheel_huber_) wf_huber++;
             }
-            auto med = [](std::vector<double> v){ if(v.empty())return 0.0; std::sort(v.begin(),v.end()); return v[v.size()/2]; };
-            auto p95 = [](std::vector<double> v){ if(v.empty())return 0.0; std::sort(v.begin(),v.end()); return v[(size_t)(0.95*v.size())]; };
-            for (auto &r : raw_res) r = std::fabs(r);
-            std::vector<double> an; for (auto &r : norm_res) an.push_back(std::fabs(r));
-            ROS_WARN("[WHEEL] factors=%d skip_nodata=%d skip_turn=%d raw_resid_med=%.4f p95=%.4f norm_resid_med=%.3f p95=%.3f",
-                     wf_cnt, wf_nodata, wf_turn, med(raw_res), p95(raw_res), med(an), p95(an));
+            auto med=[](std::vector<double> v){if(v.empty())return 0.0;std::sort(v.begin(),v.end());return v[v.size()/2];};
+            auto p95=[](std::vector<double> v){if(v.empty())return 0.0;std::sort(v.begin(),v.end());return v[(size_t)(0.95*v.size())];};
+            ROS_WARN("[WHEEL] se2 factors=%d invalid=%d huber_hit=%d rawx_med=%.4f rawy_med=%.4f rawyaw_med=%.4f norm_med=%.3f norm_p95=%.3f",
+                     wf_cnt, wf_invalid, wf_huber, med(rx), med(ry), med(ryaw), med(nx), p95(nx));
+        }
+        else if (WHEEL_FACTOR_ENABLE) {   // forward_only ablation (1-D), uses preintegration sum
+            int wf_cnt=0, wf_invalid=0; std::vector<double> raw_res;
+            const double WHEEL_VAR_1D = 1.0e-3;
+            for (int i = 0; i < frame_count; i++) {
+                int j = i + 1; WheelPreintegration *wp = wheel_pre_integrations[j];
+                if (!wp || !wp->valid) { wf_invalid++; continue; }
+                double ds = 0.5*(wp->sum_dl + wp->sum_dr);
+                problem.AddResidualBlock(WheelForwardFunctor::Create(ds, WHEEL_VAR_1D), NULL, para_Pose[i], para_Pose[j]);
+                wf_cnt++;
+                raw_res.push_back(std::fabs((Rs[i].transpose()*(Ps[j]-Ps[i])).x() - ds));
+            }
+            auto med=[](std::vector<double> v){if(v.empty())return 0.0;std::sort(v.begin(),v.end());return v[v.size()/2];};
+            ROS_WARN("[WHEEL] fwd_only factors=%d invalid=%d raw_med=%.4f", wf_cnt, wf_invalid, med(raw_res));
         }
         if (NHC_ENABLE && USE_IMU) {
             for (int i = 0; i <= frame_count; i++)
@@ -2619,17 +2637,22 @@ void Estimator::optimization()
             }
         }
 
-        // P1-Wheel: the 0->1 wheel forward factor touches the marginalized pose0 -> must enter marg.
-        if (WHEEL_FACTOR_ENABLE)
+        // P1-Wheel: the 0->1 wheel factor touches the marginalized pose0 -> must enter marg (SAME object, loss).
+        if (WHEEL_FACTOR_ENABLE && wheel_pre_integrations[1] && wheel_pre_integrations[1]->valid)
         {
-            double dl, dr; int ns;
-            double ds01 = integrateWheel(Headers[0], Headers[1], dl, dr, ns);
-            double dpsi = std::fabs(Utility::R2ypr(Rs[0].transpose() * Rs[1]).x());
-            if (ns > 0 && dpsi <= 10.0)
+            WheelPreintegration *wp = wheel_pre_integrations[1];
+            ceres::CostFunction *cf;
+            if (WHEEL_MODE_SE2) {
+                Eigen::Matrix3d cov = wp->cov; cov(2,2) *= (wheel_yaw_scale_*wheel_yaw_scale_);
+                cov += 1e-9*Eigen::Matrix3d::Identity();
+                Eigen::Matrix3d sqrt_info = Eigen::LLT<Eigen::Matrix3d>(cov.inverse()).matrixL().transpose();
+                cf = WheelSE2Functor::Create(wp->dx, wp->dy, wp->dtheta, sqrt_info);
+            } else {
+                cf = WheelForwardFunctor::Create(0.5*(wp->sum_dl+wp->sum_dr), 1.0e-3);
+            }
             {
-                double var = 1.0e-3;   // same WHEEL_SIGMA0_2 as optimization (ks=kpsi=0)
                 ResidualBlockInfo *rbi = new ResidualBlockInfo(
-                    WheelForwardFunctor::Create(ds01, var), NULL,
+                    cf, new ceres::HuberLoss(wheel_huber_),
                     vector<double *>{para_Pose[0], para_Pose[1]}, vector<int>{0});  // drop pose0
                 marginalization_info->addResidualBlockInfo(rbi);
             }

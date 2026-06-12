@@ -69,6 +69,7 @@ extern int POSE_COV_EVERY_N;
 extern int FOG_FACTOR_ENABLE;     // P1 (fwvio) factor switches, default 0 (flags-off bit-invariance)
 extern int WHEEL_FACTOR_ENABLE;
 extern int NHC_ENABLE;
+extern int WHEEL_MODE_SE2;        // 1=SE(2), 0=forward_only ablation
 // pts_gt for debug purpose;
 extern map<int, Eigen::Vector3d> pts_gt;
 
