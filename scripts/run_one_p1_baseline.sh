@@ -80,7 +80,10 @@ fi
 # 路徑設定
 # =========================================================
 SATA_BASE="/mnt/sata4t/ivlab3_data/vins_project"
-VINS_WS="/home/ivlab3/fwvio_estimator_ws"
+# P1-Wheel v3.1 P0 FIX: self-locating EST_WS from THIS script's location (was hard-coded to the frozen fork,
+# causing the worktree runner to launch frozen-fork binaries -> wheel code never ran). Never hard-code a ws.
+VINS_WS="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+echo "[P0-SELF-LOCATE] EST_WS = ${VINS_WS}"
 PIPELINE_DIR="${HOME}/Lucas_ws/Visual/keyframe_pipeline"
 VIO_TO_TUM="${SATA_BASE}/tools/vio_csv_to_tum.py"
 
@@ -123,7 +126,7 @@ VINS_CONFIG_DIR="$(dirname "${VINS_CONFIG}")"
 
 TMP_VINS_CONFIG="${VINS_CONFIG_DIR}/vins_config_tmp_${CONFIG_MODE}_${VINS_IMU_NOISE_MODE}_${SEQ_NAME}.yaml"
 
-RESULT_ROOT_SAT="/mnt/sata4t/ivlab3_data/fwvio/results/p1_factors/_work/${CONFIG_MODE}/${SEQ_NAME}"
+RESULT_ROOT_SAT="/mnt/sata4t/ivlab3_data/fwvio/results/p1_wheel_v2/_work_wheel/${CONFIG_MODE}/${SEQ_NAME}"
 RUN_DIR="${RESULT_ROOT_SAT}/vins_raw"
 FEATURE_DIR="${RESULT_ROOT_SAT}/admission/features"
 LABEL_DIR="${RESULT_ROOT_SAT}/admission/labels"
@@ -266,6 +269,18 @@ LOOP_BIN="${VINS_WS}/install/loop_fusion/lib/loop_fusion/loop_fusion_node"
 VINS_BIN="${VINS_WS}/install/vins/lib/vins/vins_node"
 PLAYER_BIN="${VINS_WS}/install/kaist_player/lib/kaist_player/kaist_player_node"
 
+# P0 FAIL-FAST: all three binaries MUST live under THIS ws's install/ (not the frozen fork).
+for b in "${LOOP_BIN}" "${VINS_BIN}" "${PLAYER_BIN}"; do
+  rb="$(readlink -f "$b")"
+  case "$rb" in
+    "${VINS_WS}/install/"*) ;;
+    *) echo "[P0-FAILFAST] binary $rb NOT under ${VINS_WS}/install -> refusing to run"; exit 7;;
+  esac
+done
+echo "[P0-FAILFAST] all 3 binaries under ${VINS_WS}/install (sha256:"
+for b in "${LOOP_BIN}" "${VINS_BIN}" "${PLAYER_BIN}"; do echo "    $(sha256sum "$b" | cut -c1-16) $b"; done
+echo ")"
+
 "${LOOP_BIN}" "${TMP_VINS_CONFIG}" \
   --ros-args -p use_sim_time:=true \
   > "${LOG_DIR}/loop_fusion.log" 2>&1 &
@@ -284,6 +299,14 @@ sleep 5
   --ros-args --params-file "${TMP_PLAYER_CONFIG}" \
   > "${LOG_DIR}/player.log" 2>&1 &
 PLAYER_PID=$!
+
+sleep 2
+# P0 POST-LAUNCH PROOF: record the ACTUAL exe of each running node (strongest binary-identity evidence).
+{
+  echo "[P0-PROC-EXE] LOOP  pid=${LOOP_PID}  exe=$(readlink -f /proc/${LOOP_PID}/exe 2>/dev/null)"
+  echo "[P0-PROC-EXE] VINS  pid=${VINS_PID}  exe=$(readlink -f /proc/${VINS_PID}/exe 2>/dev/null)"
+  echo "[P0-PROC-EXE] PLAYER pid=${PLAYER_PID} exe=$(readlink -f /proc/${PLAYER_PID}/exe 2>/dev/null)"
+} | tee "${LOG_DIR}/proc_exe_proof.txt"
 
 # =========================================================
 # 監控播放進度
