@@ -66,6 +66,9 @@ extern int RELIABILITY_LOG_EVERY_N;
 // [pose-cov] integrity diagnostic switch (DEFAULT OFF; expensive DENSE_SVD covariance per keyframe).
 extern int POSE_COV_ENABLE;
 extern int POSE_COV_EVERY_N;
+extern int FOG_FACTOR_ENABLE;     // P1 (fwvio) factor switches, default 0 (flags-off bit-invariance)
+extern int WHEEL_FACTOR_ENABLE;
+extern int NHC_ENABLE;
 // pts_gt for debug purpose;
 extern map<int, Eigen::Vector3d> pts_gt;
 

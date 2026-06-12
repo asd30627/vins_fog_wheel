@@ -37,6 +37,9 @@
 #include "../factor/projectionTwoFrameOneCamFactor.h"
 #include "../factor/projectionTwoFrameTwoCamFactor.h"
 #include "../factor/projectionOneFrameTwoCamFactor.h"
+#include "../factor/fog_rotation_factor.h"      // P1 (fwvio) explicit factors
+#include "../factor/wheel_forward_factor.h"
+#include "../factor/nhc_factor.h"
 #include "../featureTracker/feature_tracker.h"
 #include "reliability_logger.h"
 #include <string>
@@ -326,6 +329,12 @@ class Estimator
     // ===== v5 SO(3) gyro integration =====
     Eigen::Quaterniond pending_gyro_raw_delta_q;
     Eigen::Quaterniond pending_gyro_bgcorr_delta_q;
+
+    // ===== P1 (fwvio) factor data buffers — keyed by keyframe index j (rel to i=j-1).
+    // Filled by the player->estimator FOG/wheel plumbing (P1 Task 2). Empty => factor guards skip,
+    // so flag-ON is a safe no-op until plumbing lands; flag-OFF (default) = baseline unchanged.
+    std::map<int, Eigen::Quaterniond> fog_dR_buf;   // FOG SO(3) increment R_i->R_j
+    std::map<int, double> wheel_ds_buf;             // wheel forward displacement i->j [m]
 
     double pending_gyro_raw_delta_angle_deg;
     double pending_gyro_raw_rotvec_x_deg;

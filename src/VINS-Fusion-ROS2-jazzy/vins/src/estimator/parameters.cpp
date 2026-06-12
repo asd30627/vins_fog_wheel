@@ -54,6 +54,10 @@ int SAVE_RELIABILITY_FEATURES = 1;
 int RELIABILITY_LOG_EVERY_N = 1;
 int POSE_COV_ENABLE = 0;   // DEFAULT OFF — expensive [pose-cov] DENSE_SVD diagnostic (Paper-2 Sigma_A only)
 int POSE_COV_EVERY_N = 1;
+// P1 (fwvio) factor switches — DEFAULT OFF. flags-off => baseline behaviour unchanged (bit-invariance guardrail).
+int FOG_FACTOR_ENABLE = 0;
+int WHEEL_FACTOR_ENABLE = 0;
+int NHC_ENABLE = 0;
 map<int, Eigen::Vector3d> pts_gt;
 std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK;
@@ -205,6 +209,17 @@ void readParameters(std::string config_file)
     }
     if (POSE_COV_EVERY_N < 1) POSE_COV_EVERY_N = 1;
     ROS_WARN("POSE_COV_ENABLE: %d (every_n=%d)", POSE_COV_ENABLE, POSE_COV_EVERY_N);
+
+    // P1 (fwvio) factor switches — default 0 (flags-off bit-invariance). Set via config or env.
+    FOG_FACTOR_ENABLE = 0; WHEEL_FACTOR_ENABLE = 0; NHC_ENABLE = 0;
+    if (!fsSettings["fog_factor_enable"].empty())   FOG_FACTOR_ENABLE   = (int)fsSettings["fog_factor_enable"];
+    if (!fsSettings["wheel_factor_enable"].empty()) WHEEL_FACTOR_ENABLE = (int)fsSettings["wheel_factor_enable"];
+    if (!fsSettings["nhc_enable"].empty())          NHC_ENABLE          = (int)fsSettings["nhc_enable"];
+    { const char *e;
+      if ((e=getenv("FOG_FACTOR_ENABLE")))   FOG_FACTOR_ENABLE   = atoi(e);
+      if ((e=getenv("WHEEL_FACTOR_ENABLE"))) WHEEL_FACTOR_ENABLE = atoi(e);
+      if ((e=getenv("NHC_ENABLE")))          NHC_ENABLE          = atoi(e); }
+    ROS_WARN("P1 factors: FOG=%d WHEEL=%d NHC=%d", FOG_FACTOR_ENABLE, WHEEL_FACTOR_ENABLE, NHC_ENABLE);
 
     USE_GPU = fsSettings["use_gpu"];
     USE_GPU_ACC_FLOW = fsSettings["use_gpu_acc_flow"];

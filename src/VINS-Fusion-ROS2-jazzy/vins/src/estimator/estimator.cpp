@@ -2266,6 +2266,40 @@ void Estimator::optimization()
         }
     }
 
+    // ===== P1 (fwvio) explicit FOG / wheel / soft-NHC factors — DEFAULT OFF =====
+    // flags-off (default) => none of this executes => baseline bit-invariance. Data buffers are
+    // filled by the player->estimator plumbing (P1 Task 2); empty-buffer guard makes flag-ON a safe
+    // no-op until then. Inserted between adjacent keyframes (i, j=i+1), same locus as IMUFactor.
+    {
+        const double FOG_COV_RAD2 = 1.22e-12;   // sensors.yaml cov_diag_rad2 @0.1s (scaled by dt below)
+        const double WHEEL_VAR_M2 = 1.0e-4;      // sensors.yaml forward_var_m2 (placeholder, Task5 re-cal)
+        const double NHC_SIGMA_MS = 0.3;         // pre-registered soft-NHC sigma (0.3 m/s)
+        if (FOG_FACTOR_ENABLE) {
+            for (int i = 0; i < frame_count; i++) {
+                int j = i + 1; auto it = fog_dR_buf.find(j);
+                if (it == fog_dR_buf.end()) continue;
+                double dt = Headers[j] - Headers[i];
+                double cov = FOG_COV_RAD2 * (dt > 1e-6 ? dt / 0.1 : 1.0);   // cov ∝ dt
+                Eigen::Matrix3d sqrt_info = (1.0 / std::sqrt(cov)) * Eigen::Matrix3d::Identity();
+                problem.AddResidualBlock(FogRotationFunctor::Create(it->second, sqrt_info), NULL,
+                                         para_Pose[i], para_Pose[j]);
+            }
+        }
+        if (WHEEL_FACTOR_ENABLE) {
+            for (int i = 0; i < frame_count; i++) {
+                int j = i + 1; auto it = wheel_ds_buf.find(j);
+                if (it == wheel_ds_buf.end()) continue;
+                problem.AddResidualBlock(WheelForwardFunctor::Create(it->second, WHEEL_VAR_M2), NULL,
+                                         para_Pose[i], para_Pose[j]);
+            }
+        }
+        if (NHC_ENABLE && USE_IMU) {
+            for (int i = 0; i <= frame_count; i++)
+                problem.AddResidualBlock(NhcFunctor::Create(NHC_SIGMA_MS), NULL,
+                                         para_Pose[i], para_SpeedBias[i]);
+        }
+    }
+
     int f_m_cnt = 0;
     int feature_index = -1;
     for (auto &it_per_id : f_manager.feature)
