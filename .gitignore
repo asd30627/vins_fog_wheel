@@ -1,3 +1,9 @@
 build/
 install/
 log/
+.claude/
+.codex/
+openspec/
+build/
+install/
+log/
