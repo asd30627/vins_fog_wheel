@@ -999,6 +999,31 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     }
 }
 
+// P1-Wheel: raw measurements stored by timestamp; prune only what no future interval can need.
+void Estimator::inputWheel(double t, double dl, double dr, double df)
+{
+    mWheel.lock();
+    wheel_buffer.push_back({t, dl, dr, df});
+    // keep a small margin before the oldest keyframe; drop measurements strictly older than (Headers[0]-1s)
+    double oldest_need = (frame_count >= 0) ? (Headers[0] - 1.0) : -1.0;
+    while (!wheel_buffer.empty() && wheel_buffer.front().timestamp < oldest_need)
+        wheel_buffer.pop_front();
+    mWheel.unlock();
+}
+
+// Integrate forward distance over (ti, tj]. Each raw measurement is its own increment over (prev, this],
+// so we sum measurements whose stamp lies in (ti, tj]. No double-counting across adjacent intervals.
+double Estimator::integrateWheel(double ti, double tj, double &dl_out, double &dr_out, int &nsamp)
+{
+    double sf = 0.0; dl_out = 0.0; dr_out = 0.0; nsamp = 0;
+    mWheel.lock();
+    for (const auto &w : wheel_buffer)
+        if (w.timestamp > ti && w.timestamp <= tj)
+        { sf += w.delta_forward; dl_out += w.delta_left; dr_out += w.delta_right; ++nsamp; }
+    mWheel.unlock();
+    return sf;
+}
+
 void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame)
 {
     ROS_ERROR("deprecated at VINS-Fusion");
@@ -2286,12 +2311,30 @@ void Estimator::optimization()
             }
         }
         if (WHEEL_FACTOR_ENABLE) {
+            // variance model (urban28-frozen): sigma_w^2 = WHEEL_SIGMA0_2 + ks|ds| + kpsi|dpsi|.
+            const double WHEEL_SIGMA0_2 = 1.0e-3, WHEEL_KS = 0.0, WHEEL_KPSI = 0.0;
+            const double WHEEL_TURN_SKIP_DEG = 10.0;   // arc/chord + lever-arm breaks down on sharp turns -> skip
+            int wf_cnt = 0, wf_nodata = 0, wf_turn = 0;
+            std::vector<double> raw_res, norm_res;
             for (int i = 0; i < frame_count; i++) {
-                int j = i + 1; auto it = wheel_ds_buf.find(j);
-                if (it == wheel_ds_buf.end()) continue;
-                problem.AddResidualBlock(WheelForwardFunctor::Create(it->second, WHEEL_VAR_M2), NULL,
+                int j = i + 1; double dl, dr; int ns;
+                double ds = integrateWheel(Headers[i], Headers[j], dl, dr, ns);
+                if (ns == 0) { wf_nodata++; continue; }
+                double dpsi = std::fabs(Utility::R2ypr(Rs[i].transpose() * Rs[j]).x());  // |yaw change| deg
+                if (dpsi > WHEEL_TURN_SKIP_DEG) { wf_turn++; continue; }
+                double var = WHEEL_SIGMA0_2 + WHEEL_KS * std::fabs(ds) + WHEEL_KPSI * dpsi;
+                problem.AddResidualBlock(WheelForwardFunctor::Create(ds, var), NULL,
                                          para_Pose[i], para_Pose[j]);
+                wf_cnt++;
+                double rb = (Rs[i].transpose() * (Ps[j] - Ps[i])).x() - ds;
+                raw_res.push_back(rb); norm_res.push_back(rb / std::sqrt(var));
             }
+            auto med = [](std::vector<double> v){ if(v.empty())return 0.0; std::sort(v.begin(),v.end()); return v[v.size()/2]; };
+            auto p95 = [](std::vector<double> v){ if(v.empty())return 0.0; std::sort(v.begin(),v.end()); return v[(size_t)(0.95*v.size())]; };
+            for (auto &r : raw_res) r = std::fabs(r);
+            std::vector<double> an; for (auto &r : norm_res) an.push_back(std::fabs(r));
+            ROS_WARN("[WHEEL] factors=%d skip_nodata=%d skip_turn=%d raw_resid_med=%.4f p95=%.4f norm_resid_med=%.3f p95=%.3f",
+                     wf_cnt, wf_nodata, wf_turn, med(raw_res), p95(raw_res), med(an), p95(an));
         }
         if (NHC_ENABLE && USE_IMU) {
             for (int i = 0; i <= frame_count; i++)
@@ -2539,6 +2582,22 @@ void Estimator::optimization()
                                                                            vector<double *>{para_Pose[0], para_SpeedBias[0], para_Pose[1], para_SpeedBias[1]},
                                                                            vector<int>{0, 1});
                 marginalization_info->addResidualBlockInfo(residual_block_info);
+            }
+        }
+
+        // P1-Wheel: the 0->1 wheel forward factor touches the marginalized pose0 -> must enter marg.
+        if (WHEEL_FACTOR_ENABLE)
+        {
+            double dl, dr; int ns;
+            double ds01 = integrateWheel(Headers[0], Headers[1], dl, dr, ns);
+            double dpsi = std::fabs(Utility::R2ypr(Rs[0].transpose() * Rs[1]).x());
+            if (ns > 0 && dpsi <= 10.0)
+            {
+                double var = 1.0e-3;   // same WHEEL_SIGMA0_2 as optimization (ks=kpsi=0)
+                ResidualBlockInfo *rbi = new ResidualBlockInfo(
+                    WheelForwardFunctor::Create(ds01, var), NULL,
+                    vector<double *>{para_Pose[0], para_Pose[1]}, vector<int>{0});  // drop pose0
+                marginalization_info->addResidualBlockInfo(rbi);
             }
         }
 

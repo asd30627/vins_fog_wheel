@@ -19,6 +19,7 @@
 #include <ceres/ceres.h>
 #include <unordered_map>
 #include <queue>
+#include <deque>
 #include <opencv2/core/eigen.hpp>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
@@ -111,6 +112,8 @@ class Estimator
     // interface
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
     void inputIMU(double t, const Vector3d &linearAcceleration, const Vector3d &angularVelocity);
+    void inputWheel(double t, double dl, double dr, double df);   // P1-Wheel
+    double integrateWheel(double ti, double tj, double &dl_out, double &dr_out, int &nsamp);  // (ti,tj] forward dist
     void inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame);
     void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
@@ -204,6 +207,10 @@ class Estimator
     std::mutex mPropagate;
     queue<pair<double, Eigen::Vector3d>> accBuf;
     queue<pair<double, Eigen::Vector3d>> gyrBuf;
+    // P1-Wheel: raw measurements stored BY TIMESTAMP (never by sliding-window index).
+    struct WheelMeasurement { double timestamp; double delta_left; double delta_right; double delta_forward; };
+    std::deque<WheelMeasurement> wheel_buffer;
+    std::mutex mWheel;
     queue<pair<double, map<int, vector<pair<int, Eigen::Matrix<double, 7, 1> > > > > > featureBuf;
     double prevTime, curTime;
     bool openExEstimation;

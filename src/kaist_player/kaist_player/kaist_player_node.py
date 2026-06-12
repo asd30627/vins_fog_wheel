@@ -18,7 +18,7 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, Imu
 from rosgraph_msgs.msg import Clock
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Vector3Stamped
 
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
@@ -55,6 +55,15 @@ class FogGyroSample:
     gx: float
     gy: float
     gz: float
+
+
+@dataclass
+class WheelDelta:                 # P1-Wheel: per-encoder-sample forward increment
+    ts_ns: int
+    dl: float                     # left wheel forward distance [m] since prev sample
+    dr: float                     # right wheel forward distance [m]
+    df: float                     # (dl+dr)/2 [m]
+    dt: float                     # seconds since prev sample
 
 
 @dataclass
@@ -163,6 +172,12 @@ class KaistPlayerNode(Node):
             'fog_csv',
             'data/urban28-pankyo/sensor_data/fog.csv'
         )
+        # P1-Wheel: encoder -> /wheel/delta. publish_wheel_topic default false (B0 unchanged).
+        self.declare_parameter('publish_wheel_topic', False)
+        self.declare_parameter('encoder_csv', 'data/urban28-pankyo/sensor_data/encoder.csv')
+        self.declare_parameter('encoder_param_txt',
+                               'calibration/urban28-pankyo/calibration/EncoderParameter.txt')
+        self.declare_parameter('wheel_topic', '/wheel/delta')
         self.declare_parameter('image_root', 'img')
 
         # imu source mode
@@ -274,6 +289,14 @@ class KaistPlayerNode(Node):
         fog_csv_param = self.get_parameter('fog_csv').value
         image_root_param = self.get_parameter('image_root').value
         gt_csv_param = self.get_parameter('gt_csv').value
+        self.publish_wheel_topic = bool(self.get_parameter('publish_wheel_topic').value)
+        self.wheel_topic = str(self.get_parameter('wheel_topic').value)
+        self.encoder_csv = None; self.encoder_param_txt = None
+        if self.publish_wheel_topic:
+            self.encoder_csv = self._resolve_existing_file(
+                self.get_parameter('encoder_csv').value, fallback_name='encoder.csv')
+            self.encoder_param_txt = self._resolve_existing_file(
+                self.get_parameter('encoder_param_txt').value, fallback_name='EncoderParameter.txt')
 
         self.stereo_stamp_csv = self._resolve_existing_file(
             stereo_stamp_param, fallback_name='stereo_stamp.csv'
@@ -308,6 +331,8 @@ class KaistPlayerNode(Node):
         self.pub_left = self.create_publisher(Image, self.left_topic, 10)
         self.pub_right = self.create_publisher(Image, self.right_topic, 10)
         self.pub_imu = self.create_publisher(Imu, self.imu_topic, 200)
+        self.pub_wheel = self.create_publisher(Vector3Stamped, self.wheel_topic, 200) \
+            if self.publish_wheel_topic else None
         self.pub_clock = self.create_publisher(Clock, self.clock_topic, 50)
 
         self.pub_gt_pose = None
@@ -345,9 +370,14 @@ class KaistPlayerNode(Node):
         if self.enable_gt and self.gt_csv is not None:
             gt_events = self._load_gt_events(self.gt_csv)
 
+        wheel_events: List[Event] = []
+        if self.publish_wheel_topic:
+            wheel_events = self._load_wheel_events()
+
         self.events: List[Event] = sorted(
-            stereo_events + imu_events + gt_events,
-            key=lambda e: (e.ts_ns, 0 if e.kind == 'imu' else 1 if e.kind == 'gt' else 2)
+            stereo_events + imu_events + gt_events + wheel_events,
+            key=lambda e: (e.ts_ns, 0 if e.kind == 'imu' else 1 if e.kind == 'gt'
+                           else 3 if e.kind == 'wheel' else 2)
         )
 
         if not self.events:
@@ -792,6 +822,61 @@ class KaistPlayerNode(Node):
 
         self.get_logger().info(f'xsens samples loaded = {len(samples)}')
         return samples
+
+    def _load_encoder_params(self):
+        """parse EncoderParameter.txt (per-seq; do NOT assume identical). -> (res, Dl, Dr)."""
+        res = Dl = Dr = None
+        for line in open(self.encoder_param_txt):
+            l = line.lower()
+            if 'resolution' in l: res = float(line.split(':')[1])
+            elif 'left wheel diameter' in l: Dl = float(line.split(':')[1])
+            elif 'right wheel diameter' in l: Dr = float(line.split(':')[1])
+        if res is None or Dl is None or Dr is None:
+            raise RuntimeError(f'EncoderParameter parse failed: res={res} Dl={Dl} Dr={Dr}')
+        self.get_logger().info(f'encoder params: resolution={res} Dl={Dl} Dr={Dr}')
+        return res, Dl, Dr
+
+    def _load_wheel_events(self) -> List[Event]:
+        """encoder.csv (ts_ns, Lcount, Rcount cumulative) -> per-sample forward increments.
+        dsL = (dLcount/res)*pi*Dl ; dsR likewise ; dsF=(dsL+dsR)/2. First sample emits nothing.
+        Sanity-checked (monotonic ts, count jump, wraparound, sign, NaN, dt<=0)."""
+        import math
+        res, Dl, Dr = self._load_encoder_params()
+        rows = []
+        for raw in open(self.encoder_csv):
+            p = raw.strip().split(',')
+            if len(p) < 3: continue
+            try: rows.append((int(p[0]), float(p[1]), float(p[2])))
+            except ValueError: continue
+        rows.sort(key=lambda r: r[0])
+        events = []; bad_dt = bad_jump = 0; tot = 0.0
+        kL = math.pi * Dl / res; kR = math.pi * Dr / res
+        prev = None
+        for ts, lc, rc in rows:
+            if prev is None: prev = (ts, lc, rc); continue
+            pts, plc, prc = prev
+            dt = (ts - pts) / 1e9
+            if dt <= 0: bad_dt += 1; prev = (ts, lc, rc); continue
+            dnl = lc - plc; dnr = rc - prc
+            # wraparound / impossible jump guard: >2 wheel revs in one ~10ms sample is non-physical
+            if abs(dnl) > 4 * res or abs(dnr) > 4 * res: bad_jump += 1; prev = (ts, lc, rc); continue
+            dsl = dnl * kL; dsr = dnr * kR; dsf = 0.5 * (dsl + dsr)
+            if not (math.isfinite(dsf)): prev = (ts, lc, rc); continue
+            tot += dsf
+            events.append(Event(ts_ns=ts, kind='wheel', payload=WheelDelta(ts, dsl, dsr, dsf, dt)))
+            prev = (ts, lc, rc)
+        self.get_logger().info(
+            f'wheel events built = {len(events)}; Sigma forward = {tot:.2f} m; '
+            f'skipped bad_dt={bad_dt} bad_jump={bad_jump}')
+        return events
+
+    def _publish_wheel(self, w: 'WheelDelta') -> None:
+        msg = Vector3Stamped()
+        sec, nsec = sec_nsec_from_ns(w.ts_ns)
+        msg.header.stamp.sec = sec; msg.header.stamp.nanosec = nsec
+        msg.header.frame_id = 'wheel'
+        msg.vector.x = w.dl; msg.vector.y = w.dr; msg.vector.z = w.df   # left, right, forward [m]
+        self.pub_wheel.publish(msg)
 
     def _load_fog_samples(self, csv_path: str) -> List[FogGyroSample]:
         if not os.path.isfile(csv_path):
@@ -1264,6 +1349,8 @@ class KaistPlayerNode(Node):
                 self._publish_gt(ev.payload)
             elif ev.kind == 'stereo':
                 self._publish_stereo(ev.payload)
+            elif ev.kind == 'wheel':
+                self._publish_wheel(ev.payload)
 
             self.idx += 1
 

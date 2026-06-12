@@ -14,6 +14,7 @@
 // See the repository root LICENSE and THIRD_PARTY_NOTICES.md.
 #include <stdio.h>
 #include <queue>
+#include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <map>
 #include <thread>
 #include <mutex>
@@ -164,6 +165,13 @@ void imu_callback(const sensor_msgs::msg::Imu::SharedPtr imu_msg)
     // std::cout << "got t_imu: " << std::fixed << t << endl;
     estimator.inputIMU(t, acc, gyr);
     return;
+}
+
+// P1-Wheel: /wheel/delta (Vector3Stamped: x=delta_left, y=delta_right, z=delta_forward [m]).
+void wheel_callback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
+{
+    double t = msg->header.stamp.sec + msg->header.stamp.nanosec * (1e-9);
+    estimator.inputWheel(t, msg->vector.x, msg->vector.y, msg->vector.z);
 }
 
 
@@ -366,6 +374,10 @@ int main(int argc, char **argv)
         sub_imu = n->create_subscription<sensor_msgs::msg::Imu>(
             IMU_TOPIC, rclcpp::QoS(rclcpp::KeepLast(2000)), imu_callback);
     }
+    // P1-Wheel: always subscribe; harmless when player does not publish (B0). Estimator only uses
+    // the buffer when WHEEL_FACTOR_ENABLE=1, so subscribing does not change B0 behaviour.
+    auto sub_wheel = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
+        "/wheel/delta", rclcpp::QoS(rclcpp::KeepLast(2000)), wheel_callback);
 
     // auto sub_feature = n->create_subscription<sensor_msgs::msg::PointCloud>(
     //     "/feature_tracker/feature",

@@ -211,6 +211,10 @@ if blk_dur:
     p_text = set_yaml_number(p_text, "img_blackout_start_sec", str(float(blk_start or "0.0")))
     p_text = set_yaml_number(p_text, "img_blackout_dur_sec", str(float(blk_dur)))
     print(f"[INFO] IMG_BLACKOUT          = start={blk_start} dur={blk_dur} s")
+pub_wheel = r"${PUBLISH_WHEEL_TOPIC:-}"
+if pub_wheel.lower() in ("true", "1"):
+    p_text = set_yaml_number(p_text, "publish_wheel_topic", "true")   # unquoted YAML bool
+    print("[INFO] publish_wheel_topic   = true")
 tmp_player_config.write_text(p_text)
 
 v_text = vins_config.read_text()
