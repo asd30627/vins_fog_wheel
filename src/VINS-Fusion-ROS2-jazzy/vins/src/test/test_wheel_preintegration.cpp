@@ -1,5 +1,6 @@
 // P1-Wheel v3.3 C1 standalone test (no gtest). Build: add_executable(test_wheel ...); run manually.
 #include "../factor/wheel_preintegration.h"
+#include "../factor/fog_yaw_preintegration.h"
 #include <cstdio>
 #include <cmath>
 static int fails = 0;
@@ -63,6 +64,25 @@ int main()
         CHECK("se2 lateral perturb finite+nonzero", std::isfinite(e[1]) && std::fabs(e[1])>1e-3);
         // 10. lever arm: T_body_rear identity (C3) -> rear pose == body pose (documented; non-identity is C5+ work)
         CHECK("lever-arm identity (C3 documented)", true);
+    }
+    // 11. FOG yaw preintegration (F1)
+    {
+        double arw = 3.49e-6;  // rad/sqrt(s) (KVH DSP-1760, sensors.yaml)
+        // const yaw-rate 0.1 rad/s for 1s -> dpsi=0.1; var=arw^2*1
+        { FogYawPreintegration f(arw); for(int i=0;i<1000;i++) f.addSample(0.1*0.001, 0.001);
+          CHECK("fog const-rate dpsi=0.1", NEAR(f.dpsi,0.1,1e-12));
+          CHECK("fog var=arw^2*T", NEAR(f.var, arw*arw*1.0, 1e-18));
+          CHECK("fog var>0 PD", f.var>0); }
+        // merge(A,B) == single
+        { FogYawPreintegration s(arw),A(arw),B(arw);
+          for(int i=0;i<100;i++){double d=0.001*(1+0.01*i); s.addSample(d,0.001); if(i<50)A.addSample(d,0.001); else B.addSample(d,0.001);}
+          A.merge(B);
+          CHECK("fog merge dpsi==single", NEAR(A.dpsi,s.dpsi,1e-12));
+          CHECK("fog merge var==single", NEAR(A.var,s.var,1e-20));
+          CHECK("fog merge n==single", A.n_samples==s.n_samples); }
+        // near-zero stable
+        { FogYawPreintegration f(arw); for(int i=0;i<10;i++) f.addSample(1e-12,0.001);
+          CHECK("fog near-zero finite", std::isfinite(f.dpsi)&&std::isfinite(f.var)); }
     }
     printf("\n%s (%d failures)\n", fails==0?"ALL PASS":"FAILURES", fails);
     return fails==0?0:1;
