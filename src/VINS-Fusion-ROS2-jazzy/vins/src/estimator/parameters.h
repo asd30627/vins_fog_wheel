@@ -70,6 +70,7 @@ extern int FOG_FACTOR_ENABLE;     // P1 (fwvio) factor switches, default 0 (flag
 extern int WHEEL_FACTOR_ENABLE;
 extern int NHC_ENABLE;
 extern int WHEEL_MODE_SE2;        // 1=SE(2), 0=forward_only ablation
+extern int FOG_YAW_ENABLE;        // P1-FogWheel FOG yaw factor
 // pts_gt for debug purpose;
 extern map<int, Eigen::Vector3d> pts_gt;
 

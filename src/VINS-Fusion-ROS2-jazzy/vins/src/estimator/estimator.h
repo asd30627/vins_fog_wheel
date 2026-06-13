@@ -43,6 +43,8 @@
 #include "../factor/nhc_factor.h"
 #include "../factor/wheel_preintegration.h"     // P1-Wheel v3.3 SE(2) preintegration
 #include "../factor/wheel_se2_factor.h"
+#include "../factor/fog_yaw_preintegration.h"   // P1-FogWheel v1 FOG yaw preintegration
+#include "../factor/fog_yaw_factor.h"
 #include "../featureTracker/feature_tracker.h"
 #include "reliability_logger.h"
 #include <string>
@@ -115,6 +117,9 @@ class Estimator
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
     void inputIMU(double t, const Vector3d &linearAcceleration, const Vector3d &angularVelocity);
     void inputWheel(double t, double dl, double dr, double df);   // P1-Wheel
+    void inputFogYaw(double t, double dyaw, double dt);           // P1-FogWheel
+    bool fogYawAvailable(double t);
+    void buildFogYawPreint(int idx, double t0, double t1);
     void inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame);
     void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
@@ -212,6 +217,12 @@ class Estimator
     struct WheelMeasurement { double timestamp; double delta_left; double delta_right; double delta_forward; };
     std::deque<WheelMeasurement> wheel_buffer;
     std::mutex mWheel;
+    // P1-FogWheel: FOG yaw raw measurements by timestamp.
+    struct FogYawMeasurement { double timestamp; double dyaw; double dt; };
+    std::deque<FogYawMeasurement> fog_buffer;
+    std::mutex mFog;
+    FogYawPreintegration *fog_yaw_preint[(WINDOW_SIZE + 1)] = {nullptr};
+    double fog_arw_ = 3.49e-6, fog_yaw_scale_ = 1.0;   // FOG ARW [rad/sqrt(s)], yaw sqrt_info scale (YAML in F4)
     queue<pair<double, map<int, vector<pair<int, Eigen::Matrix<double, 7, 1> > > > > > featureBuf;
     double prevTime, curTime;
     bool openExEstimation;

@@ -174,6 +174,16 @@ void wheel_callback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
     estimator.inputWheel(t, msg->vector.x, msg->vector.y, msg->vector.z);
 }
 
+// P1-FogWheel: /fog/yaw (Vector3Stamped: z = yaw increment [rad]; dt from consecutive stamps).
+void fog_yaw_callback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
+{
+    static double prev_t = -1.0;
+    double t = msg->header.stamp.sec + msg->header.stamp.nanosec * (1e-9);
+    double dt = (prev_t < 0) ? 0.001 : (t - prev_t); prev_t = t;
+    if (dt <= 0) dt = 1e-3;
+    estimator.inputFogYaw(t, msg->vector.z, dt);
+}
+
 
 void feature_callback(const sensor_msgs::msg::PointCloud::SharedPtr feature_msg)
 {
@@ -378,6 +388,8 @@ int main(int argc, char **argv)
     // the buffer when WHEEL_FACTOR_ENABLE=1, so subscribing does not change B0 behaviour.
     auto sub_wheel = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
         "/wheel/delta", rclcpp::QoS(rclcpp::KeepLast(2000)), wheel_callback);
+    auto sub_fog = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
+        "/fog/yaw", rclcpp::QoS(rclcpp::KeepLast(5000)), fog_yaw_callback);
 
     // auto sub_feature = n->create_subscription<sensor_msgs::msg::PointCloud>(
     //     "/feature_tracker/feature",

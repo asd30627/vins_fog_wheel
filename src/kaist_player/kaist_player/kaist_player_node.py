@@ -58,6 +58,13 @@ class FogGyroSample:
 
 
 @dataclass
+class FogYaw:                     # P1-FogWheel: per-FOG-sample yaw increment
+    ts_ns: int
+    dyaw: float                   # yaw delta-angle [rad] (axis/sign applied, bias removed)
+    dt: float
+
+
+@dataclass
 class WheelDelta:                 # P1-Wheel: per-encoder-sample forward increment
     ts_ns: int
     dl: float                     # left wheel forward distance [m] since prev sample
@@ -178,6 +185,9 @@ class KaistPlayerNode(Node):
         self.declare_parameter('encoder_param_txt',
                                'calibration/urban28-pankyo/calibration/EncoderParameter.txt')
         self.declare_parameter('wheel_topic', '/wheel/delta')
+        # P1-FogWheel: FOG yaw -> /fog/yaw. publish_fog_topic default false.
+        self.declare_parameter('publish_fog_topic', False)
+        self.declare_parameter('fog_topic', '/fog/yaw')
         self.declare_parameter('image_root', 'img')
 
         # imu source mode
@@ -291,6 +301,8 @@ class KaistPlayerNode(Node):
         gt_csv_param = self.get_parameter('gt_csv').value
         self.publish_wheel_topic = bool(self.get_parameter('publish_wheel_topic').value)
         self.wheel_topic = str(self.get_parameter('wheel_topic').value)
+        self.publish_fog_topic = bool(self.get_parameter('publish_fog_topic').value)
+        self.fog_topic = str(self.get_parameter('fog_topic').value)
         self.encoder_csv = None; self.encoder_param_txt = None
         if self.publish_wheel_topic:
             self.encoder_csv = self._resolve_existing_file(
@@ -333,6 +345,8 @@ class KaistPlayerNode(Node):
         self.pub_imu = self.create_publisher(Imu, self.imu_topic, 200)
         self.pub_wheel = self.create_publisher(Vector3Stamped, self.wheel_topic, 200) \
             if self.publish_wheel_topic else None
+        self.pub_fog = self.create_publisher(Vector3Stamped, self.fog_topic, 500) \
+            if self.publish_fog_topic else None
         self.pub_clock = self.create_publisher(Clock, self.clock_topic, 50)
 
         self.pub_gt_pose = None
@@ -373,11 +387,14 @@ class KaistPlayerNode(Node):
         wheel_events: List[Event] = []
         if self.publish_wheel_topic:
             wheel_events = self._load_wheel_events()
+        fog_yaw_events: List[Event] = []
+        if self.publish_fog_topic and self.fog_csv is not None:
+            fog_yaw_events = self._load_fog_yaw_events()
 
         self.events: List[Event] = sorted(
-            stereo_events + imu_events + gt_events + wheel_events,
+            stereo_events + imu_events + gt_events + wheel_events + fog_yaw_events,
             key=lambda e: (e.ts_ns, 0 if e.kind == 'imu' else 1 if e.kind == 'gt'
-                           else 3 if e.kind == 'wheel' else 2)
+                           else 3 if e.kind == 'wheel' else 4 if e.kind == 'fog' else 2)
         )
 
         if not self.events:
@@ -878,6 +895,38 @@ class KaistPlayerNode(Node):
         msg.vector.x = w.dl; msg.vector.y = w.dr; msg.vector.z = w.df   # left, right, forward [m]
         self.pub_wheel.publish(msg)
 
+    def _load_fog_yaw_events(self) -> List[Event]:
+        """FOG yaw increments per sample (axis/sign applied via _load_fog_samples; const yaw-rate bias removed).
+        FOG only constrains yaw (D16). dyaw = yaw increment [rad]; dt from consecutive stamps."""
+        samples = self._load_fog_samples(self.fog_csv)
+        if len(samples) < 2:
+            self.get_logger().warning('publish_fog_topic: <2 fog samples'); return []
+        # yaw-rate bias over first 5 s (quasi-static start); gz is rate if fog_use_dt_rate else delta-angle
+        t0 = samples[0].ts_ns / 1e9; sum_rate = 0.0; n_b = 0
+        for k in range(1, len(samples)):
+            dt = (samples[k].ts_ns - samples[k-1].ts_ns) / 1e9
+            if dt <= 0: continue
+            rate = samples[k].gz if self.fog_use_dt_rate else samples[k].gz / dt
+            if samples[k].ts_ns / 1e9 < t0 + 5.0: sum_rate += rate; n_b += 1
+        bias_rate = (sum_rate / n_b) if (self.fog_auto_bias and n_b > 0) else 0.0
+        events = []
+        for k in range(1, len(samples)):
+            dt = (samples[k].ts_ns - samples[k-1].ts_ns) / 1e9
+            if dt <= 0: continue
+            rate = samples[k].gz if self.fog_use_dt_rate else samples[k].gz / dt
+            dyaw = (rate - bias_rate) * dt
+            events.append(Event(ts_ns=samples[k].ts_ns, kind='fog', payload=FogYaw(samples[k].ts_ns, dyaw, dt)))
+        self.get_logger().info(f'fog yaw events built = {len(events)}; bias_rate={bias_rate:.3e} rad/s')
+        return events
+
+    def _publish_fog(self, f: 'FogYaw') -> None:
+        msg = Vector3Stamped()
+        sec, nsec = sec_nsec_from_ns(f.ts_ns)
+        msg.header.stamp.sec = sec; msg.header.stamp.nanosec = nsec
+        msg.header.frame_id = 'fog'
+        msg.vector.z = f.dyaw   # yaw increment [rad]; dt from consecutive stamps
+        self.pub_fog.publish(msg)
+
     def _load_fog_samples(self, csv_path: str) -> List[FogGyroSample]:
         if not os.path.isfile(csv_path):
             raise FileNotFoundError(f'fog.csv not found: {csv_path}')
@@ -1351,6 +1400,8 @@ class KaistPlayerNode(Node):
                 self._publish_stereo(ev.payload)
             elif ev.kind == 'wheel':
                 self._publish_wheel(ev.payload)
+            elif ev.kind == 'fog':
+                self._publish_fog(ev.payload)
 
             self.idx += 1
 

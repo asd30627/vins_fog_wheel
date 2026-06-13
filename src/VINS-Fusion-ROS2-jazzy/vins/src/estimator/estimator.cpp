@@ -1037,6 +1037,39 @@ void Estimator::buildWheelPreint(int idx, double t0, double t1)
     wheel_pre_integrations[idx] = wp;
 }
 
+// P1-FogWheel: FOG yaw raw input + preintegration build (mirror of wheel).
+void Estimator::inputFogYaw(double t, double dyaw, double dt)
+{
+    mFog.lock();
+    fog_buffer.push_back({t, dyaw, dt});
+    double oldest_need = (frame_count >= 0) ? (Headers[0] - 1.0) : -1.0;
+    while (!fog_buffer.empty() && fog_buffer.front().timestamp < oldest_need)
+        fog_buffer.pop_front();
+    mFog.unlock();
+}
+
+bool Estimator::fogYawAvailable(double t)
+{
+    mFog.lock();
+    bool ok = !fog_buffer.empty() && fog_buffer.back().timestamp >= t;
+    mFog.unlock();
+    return ok;
+}
+
+void Estimator::buildFogYawPreint(int idx, double t0, double t1)
+{
+    delete fog_yaw_preint[idx];
+    FogYawPreintegration *fp = new FogYawPreintegration(fog_arw_);
+    fp->t_start = t0; fp->t_end = t1;
+    mFog.lock();
+    for (const auto &f : fog_buffer)
+        if (f.timestamp > t0 && f.timestamp <= t1)
+            fp->addSample(f.dyaw, f.dt);
+    mFog.unlock();
+    fp->valid = (fp->n_samples > 0);
+    fog_yaw_preint[idx] = fp;
+}
+
 void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame)
 {
     ROS_ERROR("deprecated at VINS-Fusion");
@@ -1124,7 +1157,8 @@ void Estimator::processMeasurements()
             {
                 bool imu_ok = (!USE_IMU || IMUAvailable(feature.first + td));
                 bool wheel_ok = (!WHEEL_FACTOR_ENABLE) || wheelAvailable(feature.first + td) || wheel_timed_out;
-                if (imu_ok && wheel_ok)
+                bool fog_ok = (!FOG_YAW_ENABLE) || fogYawAvailable(feature.first + td) || wheel_timed_out;
+                if (imu_ok && wheel_ok && fog_ok)
                     break;
                 else
                 {
@@ -1473,6 +1507,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     // P1-Wheel v3.3 C2: freeze the SE(2) wheel preintegration for interval (Headers[fc-1], Headers[fc]].
     if (WHEEL_FACTOR_ENABLE && frame_count > 0)
         buildWheelPreint(frame_count, Headers[frame_count - 1], Headers[frame_count]);
+    if (FOG_YAW_ENABLE && frame_count > 0)
+        buildFogYawPreint(frame_count, Headers[frame_count - 1], Headers[frame_count]);
 
     ImageFrame imageframe(image, header);
     imageframe.pre_integration = tmp_pre_integration;
@@ -2368,6 +2404,22 @@ void Estimator::optimization()
             auto med=[](std::vector<double> v){if(v.empty())return 0.0;std::sort(v.begin(),v.end());return v[v.size()/2];};
             ROS_WARN("[WHEEL] fwd_only factors=%d invalid=%d raw_med=%.4f", wf_cnt, wf_invalid, med(raw_res));
         }
+        if (FOG_YAW_ENABLE) {   // FOG yaw factor (1-D, tight -> dominates rotation)
+            int ff = 0, finv = 0; std::vector<double> fres;
+            for (int i = 0; i < frame_count; i++) {
+                int j = i + 1; FogYawPreintegration *fp = fog_yaw_preint[j];
+                if (!fp || !fp->valid) { finv++; continue; }
+                double var = std::max(fp->var, 1.0e-8);          // PD floor (avoids absurd sqrt_info)
+                double sqrt_info = (1.0 / std::sqrt(var)) / std::max(fog_yaw_scale_, 1e-9);
+                problem.AddResidualBlock(FogYawFunctor::Create(fp->dpsi, sqrt_info), NULL,
+                                         para_Pose[i], para_Pose[j]);
+                ff++;
+                double yaw_pred = Utility::R2ypr(Rs[i].transpose() * Rs[j]).x() * M_PI / 180.0;
+                fres.push_back(std::fabs(yaw_pred - fp->dpsi));
+            }
+            auto medf = [](std::vector<double> v){ if(v.empty())return 0.0; std::sort(v.begin(),v.end()); return v[v.size()/2]; };
+            ROS_WARN("[FOG] yaw factors=%d invalid=%d yaw_resid_med_deg=%.4f", ff, finv, medf(fres)*180.0/M_PI);
+        }
         if (NHC_ENABLE && USE_IMU) {
             for (int i = 0; i <= frame_count; i++)
                 problem.AddResidualBlock(NhcFunctor::Create(NHC_SIGMA_MS), NULL,
@@ -2637,6 +2689,17 @@ void Estimator::optimization()
                 marginalization_info->addResidualBlockInfo(rbi);
             }
         }
+        // P1-FogWheel: 0->1 FOG yaw factor touches marginalized pose0 -> must enter marg.
+        if (FOG_YAW_ENABLE && fog_yaw_preint[1] && fog_yaw_preint[1]->valid)
+        {
+            FogYawPreintegration *fp = fog_yaw_preint[1];
+            double var = std::max(fp->var, 1.0e-8);
+            double sqrt_info = (1.0 / std::sqrt(var)) / std::max(fog_yaw_scale_, 1e-9);
+            ResidualBlockInfo *rbi = new ResidualBlockInfo(
+                FogYawFunctor::Create(fp->dpsi, sqrt_info), NULL,
+                vector<double *>{para_Pose[0], para_Pose[1]}, vector<int>{0});  // drop pose0
+            marginalization_info->addResidualBlockInfo(rbi);
+        }
 
         {
             int feature_index = -1;
@@ -2818,6 +2881,7 @@ void Estimator::slideWindow()
                 {
                     std::swap(pre_integrations[i], pre_integrations[i + 1]);
                     if (WHEEL_FACTOR_ENABLE) std::swap(wheel_pre_integrations[i], wheel_pre_integrations[i + 1]);  // P1-Wheel
+                    if (FOG_YAW_ENABLE) std::swap(fog_yaw_preint[i], fog_yaw_preint[i + 1]);  // P1-FogWheel
 
                     dt_buf[i].swap(dt_buf[i + 1]);
                     linear_acceleration_buf[i].swap(linear_acceleration_buf[i + 1]);
@@ -2847,6 +2911,7 @@ void Estimator::slideWindow()
                 angular_velocity_buf[WINDOW_SIZE].clear();
             }
             if (WHEEL_FACTOR_ENABLE) { delete wheel_pre_integrations[WINDOW_SIZE]; wheel_pre_integrations[WINDOW_SIZE] = nullptr; }  // P1-Wheel
+            if (FOG_YAW_ENABLE) { delete fog_yaw_preint[WINDOW_SIZE]; fog_yaw_preint[WINDOW_SIZE] = nullptr; }  // P1-FogWheel
 
             if (true || solver_flag == INITIAL)
             {
@@ -2871,6 +2936,10 @@ void Estimator::slideWindow()
             if (WHEEL_FACTOR_ENABLE && wheel_pre_integrations[frame_count - 1] && wheel_pre_integrations[frame_count]) {
                 wheel_pre_integrations[frame_count - 1]->merge(*wheel_pre_integrations[frame_count]);
                 delete wheel_pre_integrations[frame_count]; wheel_pre_integrations[frame_count] = nullptr;
+            }
+            if (FOG_YAW_ENABLE && fog_yaw_preint[frame_count - 1] && fog_yaw_preint[frame_count]) {
+                fog_yaw_preint[frame_count - 1]->merge(*fog_yaw_preint[frame_count]);
+                delete fog_yaw_preint[frame_count]; fog_yaw_preint[frame_count] = nullptr;
             }
 
             if(USE_IMU)
