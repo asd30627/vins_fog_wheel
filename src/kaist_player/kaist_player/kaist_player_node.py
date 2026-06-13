@@ -321,7 +321,7 @@ class KaistPlayerNode(Node):
         )
 
         self.fog_csv = None
-        if self.imu_source == 'fog_xsens':
+        if self.imu_source == 'fog_xsens' or self.publish_fog_topic:   # P1-FogWheel: FOG topic needs fog.csv even with xsens IMU
             self.fog_csv = self._resolve_existing_file(
                 fog_csv_param, fallback_name='fog.csv'
             )

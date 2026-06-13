@@ -218,6 +218,10 @@ pub_wheel = r"${PUBLISH_WHEEL_TOPIC:-}"
 if pub_wheel.lower() in ("true", "1"):
     p_text = set_yaml_number(p_text, "publish_wheel_topic", "true")   # unquoted YAML bool
     print("[INFO] publish_wheel_topic   = true")
+pub_fog = r"${PUBLISH_FOG_TOPIC:-}"
+if pub_fog.lower() in ("true", "1"):
+    p_text = set_yaml_number(p_text, "publish_fog_topic", "true")
+    print("[INFO] publish_fog_topic     = true")
 tmp_player_config.write_text(p_text)
 
 v_text = vins_config.read_text()
