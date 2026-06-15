@@ -32,5 +32,6 @@ class ProjectionOneFrameTwoCamFactor : public ceres::SizedCostFunction<2, 7, 7, 
     double td_i, td_j;
     Eigen::Matrix<double, 2, 3> tangent_base;
     static Eigen::Matrix2d sqrt_info;
+    double feat_weight_ = 1.0;   // P1-Reliability R3: per-feature reliability weight (sqrt of reliability); 1.0 = bit-identical
     static double sum_t;
 };

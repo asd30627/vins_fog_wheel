@@ -78,6 +78,7 @@ bool ProjectionTwoFrameTwoCamFactor::Evaluate(double const *const *parameters, d
 #endif
 
     residual = sqrt_info * residual;
+    residual *= feat_weight_;   // R3 per-feature reliability (sqrt of reliability); 1.0 = bit-identical
 
     if (jacobians)
     {
@@ -102,6 +103,7 @@ bool ProjectionTwoFrameTwoCamFactor::Evaluate(double const *const *parameters, d
             0, 1. / dep_j, -pts_camera_j(1) / (dep_j * dep_j);
 #endif
         reduce = sqrt_info * reduce;
+        reduce *= feat_weight_;   // R3: scale all jacobian blocks (reduce feeds them) by per-feature weight
 
         if (jacobians[0])
         {
@@ -157,7 +159,7 @@ bool ProjectionTwoFrameTwoCamFactor::Evaluate(double const *const *parameters, d
         {
             Eigen::Map<Eigen::Vector2d> jacobian_td(jacobians[5]);
             jacobian_td = reduce * ric2.transpose() * Rj.transpose() * Ri * ric * velocity_i / inv_dep_i * -1.0  +
-                          sqrt_info * velocity_j.head(2);
+                          feat_weight_ * sqrt_info * velocity_j.head(2);   // R3: scale the un-reduced td term too
         }
     }
     sum_t += tic_toc.toc();
