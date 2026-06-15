@@ -63,6 +63,9 @@ extern int USE_IMU;
 extern int MULTIPLE_THREAD;
 extern int SAVE_RELIABILITY_FEATURES;
 extern int RELIABILITY_LOG_EVERY_N;
+extern int SAVE_PERFEAT_RELIABILITY;   // P1-Reliability R1: per-feature read-only log, default OFF
+extern int WHEEL_REFERENCE_ONLY;       // P1-Reliability R2: build+log wheel preint, no factor (default OFF)
+extern int FOG_YAW_REFERENCE_ONLY;     // P1-Reliability R2: build+log FOG preint, no factor (default OFF)
 // [pose-cov] integrity diagnostic switch (DEFAULT OFF; expensive DENSE_SVD covariance per keyframe).
 extern int POSE_COV_ENABLE;
 extern int POSE_COV_EVERY_N;

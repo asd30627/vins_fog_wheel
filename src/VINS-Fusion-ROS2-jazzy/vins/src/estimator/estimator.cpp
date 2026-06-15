@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 
 namespace
 {
@@ -1505,9 +1506,9 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("number of feature: %d", f_manager.getFeatureCount());
     Headers[frame_count] = header;
     // P1-Wheel v3.3 C2: freeze the SE(2) wheel preintegration for interval (Headers[fc-1], Headers[fc]].
-    if (WHEEL_FACTOR_ENABLE && frame_count > 0)
+    if ((WHEEL_FACTOR_ENABLE || WHEEL_REFERENCE_ONLY) && frame_count > 0)
         buildWheelPreint(frame_count, Headers[frame_count - 1], Headers[frame_count]);
-    if (FOG_YAW_ENABLE && frame_count > 0)
+    if ((FOG_YAW_ENABLE || FOG_YAW_REFERENCE_ONLY) && frame_count > 0)
         buildFogYawPreint(frame_count, Headers[frame_count - 1], Headers[frame_count]);
 
     ImageFrame imageframe(image, header);
@@ -1668,6 +1669,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 
             writeReliabilityFeatureRow(header);
         }
+
+        // P1-Reliability R1: per-feature read-only logging (own flag, default OFF; never feeds optimization)
+        if (SAVE_PERFEAT_RELIABILITY)
+            writePerFeatRows(header);
+
         ROS_INFO("[admission-debug] raw=%d mgr=%d key=%d outlier=%d inlier=%d ratio=%.4f w=%.3f gate=%d alpha=%.3f fail=%d",
                  tracked_feature_count_raw,
                  tracked_feature_count_mgr,
@@ -2880,8 +2886,8 @@ void Estimator::slideWindow()
                 if(USE_IMU)
                 {
                     std::swap(pre_integrations[i], pre_integrations[i + 1]);
-                    if (WHEEL_FACTOR_ENABLE) std::swap(wheel_pre_integrations[i], wheel_pre_integrations[i + 1]);  // P1-Wheel
-                    if (FOG_YAW_ENABLE) std::swap(fog_yaw_preint[i], fog_yaw_preint[i + 1]);  // P1-FogWheel
+                    if (WHEEL_FACTOR_ENABLE || WHEEL_REFERENCE_ONLY) std::swap(wheel_pre_integrations[i], wheel_pre_integrations[i + 1]);  // P1-Wheel
+                    if (FOG_YAW_ENABLE || FOG_YAW_REFERENCE_ONLY) std::swap(fog_yaw_preint[i], fog_yaw_preint[i + 1]);  // P1-FogWheel
 
                     dt_buf[i].swap(dt_buf[i + 1]);
                     linear_acceleration_buf[i].swap(linear_acceleration_buf[i + 1]);
@@ -2910,8 +2916,8 @@ void Estimator::slideWindow()
                 linear_acceleration_buf[WINDOW_SIZE].clear();
                 angular_velocity_buf[WINDOW_SIZE].clear();
             }
-            if (WHEEL_FACTOR_ENABLE) { delete wheel_pre_integrations[WINDOW_SIZE]; wheel_pre_integrations[WINDOW_SIZE] = nullptr; }  // P1-Wheel
-            if (FOG_YAW_ENABLE) { delete fog_yaw_preint[WINDOW_SIZE]; fog_yaw_preint[WINDOW_SIZE] = nullptr; }  // P1-FogWheel
+            if (WHEEL_FACTOR_ENABLE || WHEEL_REFERENCE_ONLY) { delete wheel_pre_integrations[WINDOW_SIZE]; wheel_pre_integrations[WINDOW_SIZE] = nullptr; }  // P1-Wheel
+            if (FOG_YAW_ENABLE || FOG_YAW_REFERENCE_ONLY) { delete fog_yaw_preint[WINDOW_SIZE]; fog_yaw_preint[WINDOW_SIZE] = nullptr; }  // P1-FogWheel
 
             if (true || solver_flag == INITIAL)
             {
@@ -2933,11 +2939,11 @@ void Estimator::slideWindow()
             Rs[frame_count - 1] = Rs[frame_count];
 
             // P1-Wheel v3.3 C2: MARGIN_SECOND_NEW two-segment SE(2) composition (mirror of IMU push_back below).
-            if (WHEEL_FACTOR_ENABLE && wheel_pre_integrations[frame_count - 1] && wheel_pre_integrations[frame_count]) {
+            if ((WHEEL_FACTOR_ENABLE || WHEEL_REFERENCE_ONLY) && wheel_pre_integrations[frame_count - 1] && wheel_pre_integrations[frame_count]) {
                 wheel_pre_integrations[frame_count - 1]->merge(*wheel_pre_integrations[frame_count]);
                 delete wheel_pre_integrations[frame_count]; wheel_pre_integrations[frame_count] = nullptr;
             }
-            if (FOG_YAW_ENABLE && fog_yaw_preint[frame_count - 1] && fog_yaw_preint[frame_count]) {
+            if ((FOG_YAW_ENABLE || FOG_YAW_REFERENCE_ONLY) && fog_yaw_preint[frame_count - 1] && fog_yaw_preint[frame_count]) {
                 fog_yaw_preint[frame_count - 1]->merge(*fog_yaw_preint[frame_count]);
                 delete fog_yaw_preint[frame_count]; fog_yaw_preint[frame_count] = nullptr;
             }
@@ -3179,6 +3185,172 @@ void Estimator::setupReliabilityLogger()
         reliability_logger_ready = false;
         ROS_WARN("failed to open reliability CSV logger: %s", e.what());
     }
+}
+
+// ============================================================================
+// P1-Reliability R1: per-feature read-only logging (default OFF).
+// One row per feature tracked across the latest keyframe interval [i=frame_count-1, j=frame_count].
+// Logs the RAW per-feature + per-interval state for OFFLINE d^2 recomputation in R2
+// (estimator real relative pose = wheel SE(2) + FOG yaw; stereo/triangulated depth; extrinsics).
+// PURE DIAGNOSTIC — never reads back into the optimization, so flag-off is bit-identical.
+// ============================================================================
+void Estimator::setupPerFeatLogger()
+{
+    if (!SAVE_PERFEAT_RELIABILITY)
+    {
+        perfeat_logger_ready = false;
+        return;
+    }
+    if (perfeat_logger_ready)
+        return;
+
+    const char* env_on = std::getenv("REL_PERFEAT_LOG");
+    if (env_on && std::string(env_on).size() > 0)
+    {
+        std::string v(env_on);
+        if (v == "0" || v == "false" || v == "False" || v == "OFF" || v == "off")
+        {
+            perfeat_logger_ready = false;
+            ROS_WARN("[perfeat] REL_PERFEAT_LOG=0, per-feature logging disabled.");
+            return;
+        }
+    }
+    const char* env_csv = std::getenv("REL_PERFEAT_CSV_PATH");
+    if (env_csv && std::string(env_csv).size() > 0)
+        perfeat_csv_path = std::string(env_csv);
+
+    // reuse run/sequence identity from env (set the same way as the aggregate logger)
+    const char* env_run_id = std::getenv("REL_RUN_ID");
+    if (env_run_id && std::string(env_run_id).size() > 0)
+        reliability_run_id = std::string(env_run_id);
+    const char* env_sequence = std::getenv("REL_SEQUENCE_NAME");
+    if (env_sequence && std::string(env_sequence).size() > 0)
+        reliability_sequence_name = std::string(env_sequence);
+
+    const std::string header =
+        "run_id,sequence_name,update_id,frame_count,timestamp,"
+        "feature_id,start_frame,used_num,solve_flag,is_stereo_cur,is_stereo_prev,estimated_depth,"
+        // observation at frame j = frame_count (cur)
+        "nx_j,ny_j,u_j,v_j,nxr_j,nyr_j,"
+        // observation at frame i = frame_count-1 (prev)
+        "nx_i,ny_i,u_i,v_i,nxr_i,nyr_i,"
+        // estimator visual poses (world<-body) frame i and j
+        "Pi_x,Pi_y,Pi_z,qi_x,qi_y,qi_z,qi_w,"
+        "Pj_x,Pj_y,Pj_z,qj_x,qj_y,qj_z,qj_w,"
+        // wheel SE(2) preint for interval [i->j] + 3x3 cov upper-tri
+        "w_valid,w_dx,w_dy,w_dtheta,w_t0,w_t1,w_c00,w_c01,w_c02,w_c11,w_c12,w_c22,"
+        // FOG yaw preint for interval [i->j]
+        "f_valid,f_dpsi,f_var,f_t0,f_t1,"
+        // extrinsics cam0/cam1 (body<-cam): tic + ric quat
+        "tic0_x,tic0_y,tic0_z,ric0_x,ric0_y,ric0_z,ric0_w,"
+        "tic1_x,tic1_y,tic1_z,ric1_x,ric1_y,ric1_z,ric1_w";
+
+    try
+    {
+        perfeat_logger.open(perfeat_csv_path, header);
+        perfeat_logger_ready = true;
+        ROS_INFO("[perfeat] per-feature CSV logger ready: %s", perfeat_csv_path.c_str());
+    }
+    catch (const std::exception &e)
+    {
+        perfeat_logger_ready = false;
+        ROS_WARN("[perfeat] failed to open per-feature CSV: %s", e.what());
+    }
+}
+
+void Estimator::writePerFeatRows(double header)
+{
+    if (!SAVE_PERFEAT_RELIABILITY)
+        return;
+    if (!perfeat_logger_ready)
+        setupPerFeatLogger();
+    if (!perfeat_logger_ready)
+        return;
+
+    const int j = frame_count;        // newest frame index in window
+    const int i = frame_count - 1;    // previous frame
+    if (i < 0)
+        return;
+
+    const long long this_update_id = perfeat_update_id++;
+
+    // ---- per-keyframe context (same for all features this frame) ----
+    Eigen::Quaterniond qi(Rs[i]); qi.normalize();
+    Eigen::Quaterniond qj(Rs[j]); qj.normalize();
+
+    // wheel / fog preint for the latest interval [i->j] (read-only; FOG factor NOT in graph)
+    int w_valid = 0; double w_dx=0, w_dy=0, w_dth=0, w_t0=0, w_t1=0;
+    double w_c00=0,w_c01=0,w_c02=0,w_c11=0,w_c12=0,w_c22=0;
+    if (wheel_pre_integrations[j] != nullptr)
+    {
+        WheelPreintegration *wp = wheel_pre_integrations[j];
+        w_valid = wp->valid ? 1 : 0;
+        w_dx = wp->dx; w_dy = wp->dy; w_dth = wp->dtheta;
+        w_t0 = wp->t_start; w_t1 = wp->t_end;
+        w_c00 = wp->cov(0,0); w_c01 = wp->cov(0,1); w_c02 = wp->cov(0,2);
+        w_c11 = wp->cov(1,1); w_c12 = wp->cov(1,2); w_c22 = wp->cov(2,2);
+    }
+    int f_valid = 0; double f_dpsi=0, f_var=0, f_t0=0, f_t1=0;
+    if (fog_yaw_preint[j] != nullptr)
+    {
+        FogYawPreintegration *fp = fog_yaw_preint[j];
+        f_valid = fp->valid ? 1 : 0;
+        f_dpsi = fp->dpsi; f_var = fp->var;
+        f_t0 = fp->t_start; f_t1 = fp->t_end;
+    }
+    Eigen::Quaterniond ric0(ric[0]); ric0.normalize();
+    Eigen::Quaterniond ric1(ric[1]); ric1.normalize();
+
+    std::ostringstream ctx;
+    ctx.setf(std::ios::fixed); ctx << std::setprecision(10);
+    ctx << "," << Ps[i].x() << "," << Ps[i].y() << "," << Ps[i].z()
+        << "," << qi.x() << "," << qi.y() << "," << qi.z() << "," << qi.w()
+        << "," << Ps[j].x() << "," << Ps[j].y() << "," << Ps[j].z()
+        << "," << qj.x() << "," << qj.y() << "," << qj.z() << "," << qj.w()
+        << "," << w_valid << "," << w_dx << "," << w_dy << "," << w_dth
+        << "," << std::setprecision(9) << w_t0 << "," << w_t1 << std::setprecision(10)
+        << "," << w_c00 << "," << w_c01 << "," << w_c02 << "," << w_c11 << "," << w_c12 << "," << w_c22
+        << "," << f_valid << "," << f_dpsi << "," << f_var
+        << "," << std::setprecision(9) << f_t0 << "," << f_t1 << std::setprecision(10)
+        << "," << tic[0].x() << "," << tic[0].y() << "," << tic[0].z()
+        << "," << ric0.x() << "," << ric0.y() << "," << ric0.z() << "," << ric0.w()
+        << "," << tic[1].x() << "," << tic[1].y() << "," << tic[1].z()
+        << "," << ric1.x() << "," << ric1.y() << "," << ric1.z() << "," << ric1.w();
+    const std::string ctx_str = ctx.str();
+
+    // ---- per-feature rows: features tracked across the latest interval [i, j] ----
+    for (auto &it_per_id : f_manager.feature)
+    {
+        const int sf = it_per_id.start_frame;
+        const int idx_i = i - sf;
+        const int idx_j = j - sf;
+        const int n = (int)it_per_id.feature_per_frame.size();
+        if (idx_i < 0 || idx_j < 0 || idx_j >= n)   // must be observed at BOTH i and j
+            continue;
+
+        const FeaturePerFrame &fi = it_per_id.feature_per_frame[idx_i];
+        const FeaturePerFrame &fj = it_per_id.feature_per_frame[idx_j];
+
+        auto nanIf = [](bool ok, double v) { return ok ? v : std::numeric_limits<double>::quiet_NaN(); };
+
+        std::ostringstream line;
+        line.setf(std::ios::fixed); line << std::setprecision(10);
+        line << reliability_run_id << "," << reliability_sequence_name << ","
+             << this_update_id << "," << frame_count << ","
+             << std::setprecision(9) << header << std::setprecision(10) << ","
+             << it_per_id.feature_id << "," << sf << "," << it_per_id.used_num << ","
+             << it_per_id.solve_flag << "," << (fj.is_stereo ? 1 : 0) << "," << (fi.is_stereo ? 1 : 0) << ","
+             << it_per_id.estimated_depth << ","
+             // cur (j)
+             << fj.point.x() << "," << fj.point.y() << "," << fj.uv.x() << "," << fj.uv.y() << ","
+             << nanIf(fj.is_stereo, fj.pointRight.x()) << "," << nanIf(fj.is_stereo, fj.pointRight.y()) << ","
+             // prev (i)
+             << fi.point.x() << "," << fi.point.y() << "," << fi.uv.x() << "," << fi.uv.y() << ","
+             << nanIf(fi.is_stereo, fi.pointRight.x()) << "," << nanIf(fi.is_stereo, fi.pointRight.y());
+        line << ctx_str;
+        perfeat_logger.append(line.str());
+    }
+    perfeat_logger.flush();
 }
 
 void Estimator::computePendingFeatureStats(

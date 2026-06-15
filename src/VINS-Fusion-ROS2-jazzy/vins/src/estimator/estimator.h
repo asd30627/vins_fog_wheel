@@ -47,6 +47,7 @@
 #include "../factor/fog_yaw_factor.h"
 #include "../featureTracker/feature_tracker.h"
 #include "reliability_logger.h"
+#include "perfeat_logger.h"   // P1-Reliability R1: per-feature read-only logging
 #include <string>
 #include <functional>
 
@@ -311,6 +312,14 @@ class Estimator
     ReliabilityCsvLogger reliability_feature_logger;
 
     bool reliability_logger_ready = false;
+
+    // ===== P1-Reliability R1: per-feature read-only logger (default OFF) =====
+    PerFeatCsvLogger perfeat_logger;
+    bool perfeat_logger_ready = false;
+    long long perfeat_update_id = 0;
+    std::string perfeat_csv_path = "/tmp/perfeat_reliability_vins.csv";
+    void setupPerFeatLogger();
+    void writePerFeatRows(double header);
 
     std::string reliability_run_id = "run_001";
     std::string reliability_dataset_name = "kaist";

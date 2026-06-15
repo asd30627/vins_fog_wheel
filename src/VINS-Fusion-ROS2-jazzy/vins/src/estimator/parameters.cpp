@@ -52,6 +52,11 @@ int USE_IMU;
 int MULTIPLE_THREAD;
 int SAVE_RELIABILITY_FEATURES = 1;
 int RELIABILITY_LOG_EVERY_N = 1;
+int SAVE_PERFEAT_RELIABILITY = 0;   // P1-Reliability R1: per-feature read-only log, default OFF
+// P1-Reliability R2: build+log wheel/FOG preintegration as a consistency REFERENCE without adding the factor to
+// the optimization (keeps the reference INDEPENDENT of the estimator pose). Default OFF.
+int WHEEL_REFERENCE_ONLY = 0;
+int FOG_YAW_REFERENCE_ONLY = 0;
 int POSE_COV_ENABLE = 0;   // DEFAULT OFF — expensive [pose-cov] DENSE_SVD diagnostic (Paper-2 Sigma_A only)
 int POSE_COV_EVERY_N = 1;
 // P1 (fwvio) factor switches — DEFAULT OFF. flags-off => baseline behaviour unchanged (bit-invariance guardrail).
@@ -189,6 +194,31 @@ void readParameters(std::string config_file)
 
     ROS_WARN("SAVE_RELIABILITY_FEATURES: %d", SAVE_RELIABILITY_FEATURES);
     ROS_WARN("RELIABILITY_LOG_EVERY_N: %d", RELIABILITY_LOG_EVERY_N);
+
+    // ===== P1-Reliability R1: per-feature read-only logging — DEFAULT OFF =====
+    // Pure diagnostic (one row per tracked feature per keyframe), never feeds optimization.
+    // Off => bit-identical to p1-fogwheel-v1-codefreeze. Env REL_PERFEAT_LOG / config override.
+    SAVE_PERFEAT_RELIABILITY = 0;
+    if (!fsSettings["save_perfeat_reliability"].empty())
+        SAVE_PERFEAT_RELIABILITY = (int)fsSettings["save_perfeat_reliability"];
+    // env override (enable OR disable) — keeps default OFF; lets gate runs toggle without editing config.
+    if (const char* e = std::getenv("REL_PERFEAT_LOG"))
+    {
+        std::string v(e);
+        if (v == "1" || v == "true" || v == "True" || v == "ON" || v == "on")
+            SAVE_PERFEAT_RELIABILITY = 1;
+        else if (v == "0" || v == "false" || v == "False" || v == "OFF" || v == "off")
+            SAVE_PERFEAT_RELIABILITY = 0;
+    }
+    ROS_WARN("SAVE_PERFEAT_RELIABILITY: %d", SAVE_PERFEAT_RELIABILITY);
+
+    // R2 reference-only switches (build+log preint, no factor) — env override, default OFF
+    WHEEL_REFERENCE_ONLY = 0; FOG_YAW_REFERENCE_ONLY = 0;
+    if (const char* e = std::getenv("REL_WHEEL_REFERENCE_ONLY"))
+    { std::string v(e); WHEEL_REFERENCE_ONLY = (v=="1"||v=="true"||v=="on"||v=="ON") ? 1 : 0; }
+    if (const char* e = std::getenv("REL_FOG_REFERENCE_ONLY"))
+    { std::string v(e); FOG_YAW_REFERENCE_ONLY = (v=="1"||v=="true"||v=="on"||v=="ON") ? 1 : 0; }
+    ROS_WARN("WHEEL_REFERENCE_ONLY: %d  FOG_YAW_REFERENCE_ONLY: %d", WHEEL_REFERENCE_ONLY, FOG_YAW_REFERENCE_ONLY);
 
     // ===== [pose-cov] integrity diagnostic switch — DEFAULT OFF =====
     // The DENSE_SVD per-keyframe covariance is expensive and throttles VINS below real-time at
