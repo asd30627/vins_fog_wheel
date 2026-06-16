@@ -23,6 +23,8 @@
 #include <sstream>
 #include <iomanip>
 #include <limits>
+#include <set>
+#include <map>
 
 namespace
 {
@@ -2224,6 +2226,14 @@ void Estimator::optimization()
     TicToc t_whole, t_prepare;
     vector2double();
 
+    // P1-Reliability R3b: compute per-feature reliability weights (default OFF; no-op when disabled).
+    computeFeatureReliability();
+    auto applyRel = [&](auto *fac, int fid) {
+        if (!FEATURE_RELIABILITY_ENABLE) return;
+        auto it = feat_weight_cur_.find(fid);
+        if (it != feat_weight_cur_.end()) fac->feat_weight_ = it->second;
+    };
+
     ceres::Problem problem;
     ceres::LossFunction *loss_function;
     //loss_function = NULL;
@@ -2459,6 +2469,7 @@ void Estimator::optimization()
                 Vector3d pts_j = it_per_frame.point;
                 ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
                                                                  it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                applyRel(f_td, it_per_id.feature_id);
                 ceres::ResidualBlockId rid_m = problem.AddResidualBlock(f_td, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index], para_Td[0]);
                 if (STEREO_DIAG) { dbg_mono_ids.push_back(rid_m); ++dbg_mono; }
             }
@@ -2470,6 +2481,7 @@ void Estimator::optimization()
                 {
                     ProjectionTwoFrameTwoCamFactor *f = new ProjectionTwoFrameTwoCamFactor(pts_i, pts_j_right, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocityRight,
                                                                  it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                    applyRel(f, it_per_id.feature_id);
                     ceres::ResidualBlockId rid_s = problem.AddResidualBlock(f, stereo_loss, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Ex_Pose[1], para_Feature[feature_index], para_Td[0]);
                     if (STEREO_DIAG) { dbg_stereo_ids.push_back(rid_s); ++dbg_twocam; }
                 }
@@ -2477,6 +2489,7 @@ void Estimator::optimization()
                 {
                     ProjectionOneFrameTwoCamFactor *f = new ProjectionOneFrameTwoCamFactor(pts_i, pts_j_right, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocityRight,
                                                                  it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                    applyRel(f, it_per_id.feature_id);
                     ceres::ResidualBlockId rid_o = problem.AddResidualBlock(f, stereo_loss, para_Ex_Pose[0], para_Ex_Pose[1], para_Feature[feature_index], para_Td[0]);
                     if (STEREO_DIAG) { dbg_stereo_ids.push_back(rid_o); ++dbg_onecam2; }
                 }
@@ -2731,6 +2744,7 @@ void Estimator::optimization()
                         Vector3d pts_j = it_per_frame.point;
                         ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
                                                                           it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                        applyRel(f_td, it_per_id.feature_id);
                         ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f_td, loss_function,
                                                                                         vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index], para_Td[0]},
                                                                                         vector<int>{0, 3});
@@ -2743,6 +2757,7 @@ void Estimator::optimization()
                         {
                             ProjectionTwoFrameTwoCamFactor *f = new ProjectionTwoFrameTwoCamFactor(pts_i, pts_j_right, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocityRight,
                                                                           it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                            applyRel(f, it_per_id.feature_id);
                             ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f, stereo_loss,
                                                                                            vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Ex_Pose[1], para_Feature[feature_index], para_Td[0]},
                                                                                            vector<int>{0, 4});
@@ -2752,6 +2767,7 @@ void Estimator::optimization()
                         {
                             ProjectionOneFrameTwoCamFactor *f = new ProjectionOneFrameTwoCamFactor(pts_i, pts_j_right, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocityRight,
                                                                           it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                            applyRel(f, it_per_id.feature_id);
                             ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f, stereo_loss,
                                                                                            vector<double *>{para_Ex_Pose[0], para_Ex_Pose[1], para_Feature[feature_index], para_Td[0]},
                                                                                            vector<int>{2});
@@ -3351,6 +3367,133 @@ void Estimator::writePerFeatRows(double header)
         perfeat_logger.append(line.str());
     }
     perfeat_logger.flush();
+}
+
+// ============================================================================
+// P1-Reliability R3b: per-feature consistency d^2 -> reliability=exp(-d2/2k) -> per-feature visual weight.
+// Direct port of the offline-validated R2 (r2_consistency_d2.py): wheel SE(2) reference (independent of pose;
+// WHEEL_REFERENCE_ONLY), full cov budget (wheel 3x3 + depth-from-disparity + Sigma_uv). Temporal memory (EMA
+// fast-down/slow-up) + anti-degeneracy (floor + keep-top-N). Fills feat_weight_cur_[feature_id] = sqrt(reliability).
+// Bounded by construction: reliability in (0,1], floored -> cannot blow up like the FOG factor.
+// ============================================================================
+void Estimator::computeFeatureReliability()
+{
+    feat_weight_cur_.clear();
+    if (!FEATURE_RELIABILITY_ENABLE)
+        return;
+    const int j = frame_count, i = frame_count - 1;
+    if (i < 0)
+        return;
+
+    // ---- recover pinhole intrinsics once (u = fx*nx + cx) from real observations ----
+    if (!reliability_intr_ready_)
+    {
+        double Sx=0,Sxx=0,Su=0,Sxu=0, Sy=0,Syy=0,Sv=0,Syv=0; long N=0;
+        for (auto &it : f_manager.feature)
+            for (auto &f : it.feature_per_frame)
+            {
+                double nx=f.point.x(), ny=f.point.y(), u=f.uv.x(), v=f.uv.y();
+                Sx+=nx; Sxx+=nx*nx; Su+=u; Sxu+=nx*u; Sy+=ny; Syy+=ny*ny; Sv+=v; Syv+=ny*v; N++;
+            }
+        if (N > 50)
+        {
+            double dx = N*Sxx - Sx*Sx, dy = N*Syy - Sy*Sy;
+            if (std::abs(dx)>1e-9 && std::abs(dy)>1e-9)
+            {
+                rel_fx_ = (N*Sxu - Sx*Su)/dx; rel_cx_ = (Su - rel_fx_*Sx)/N;
+                rel_fy_ = (N*Syv - Sy*Sv)/dy; rel_cy_ = (Sv - rel_fy_*Sy)/N;
+                reliability_intr_ready_ = (rel_fx_ > 1.0 && rel_fy_ > 1.0);
+            }
+        }
+        if (!reliability_intr_ready_) return;   // wait until we can calibrate intrinsics
+    }
+
+    WheelPreintegration *wp = wheel_pre_integrations[j];
+    if (wp == nullptr || !wp->valid)
+        return;   // no independent reference this interval -> leave all weights at memory/1.0 (handled below)
+
+    const double fx=rel_fx_, fy=rel_fy_, cx=rel_cx_, cy=rel_cy_;
+    const double sigma_uv = RELIABILITY_SIGMA_UV, sig2 = sigma_uv*sigma_uv;
+    // baseline (cam0<->cam1) and cam0<->body extrinsic from current estimator state
+    double baseline = (tic[0] - tic[1]).norm();
+    Eigen::Matrix3d R_bc = ric[0]; Eigen::Vector3d t_bc = tic[0];
+    Eigen::Matrix3d R_cb = R_bc.transpose(); Eigen::Vector3d t_cb = -R_cb * t_bc;
+    Eigen::Matrix3d Sig_m = wp->cov;   // 3x3 cov of (dx,dy,dtheta)
+    const double dx_r = wp->dx, dy_r = wp->dy, dth_r = wp->dtheta;
+
+    auto predict = [&](const Eigen::Vector3d &P_i, double pdx, double pdy, double pdth, bool &ok) -> Eigen::Vector2d {
+        double c=std::cos(pdth), s=std::sin(pdth);
+        Eigen::Matrix3d Rb; Rb << c,-s,0, s,c,0, 0,0,1;
+        Eigen::Vector3d Pb_i = R_bc * P_i + t_bc;
+        Eigen::Vector3d Pb_j = Rb * Pb_i + Eigen::Vector3d(pdx,pdy,0.0);
+        Eigen::Vector3d Pc_j = R_cb * Pb_j + t_cb;
+        if (Pc_j.z() <= 1e-6) { ok=false; return Eigen::Vector2d::Zero(); }
+        ok=true; return Eigen::Vector2d(fx*Pc_j.x()/Pc_j.z()+cx, fy*Pc_j.y()/Pc_j.z()+cy);
+    };
+
+    double wmin=1e9, wmax=-1e9;
+    for (auto &it : f_manager.feature)
+    {
+        const int sf = it.start_frame, idx_i = i - sf, idx_j = j - sf;
+        const int n = (int)it.feature_per_frame.size();
+        if (idx_i < 0 || idx_j < 0 || idx_j >= n) continue;
+        const FeaturePerFrame &fi = it.feature_per_frame[idx_i];
+        const FeaturePerFrame &fj = it.feature_per_frame[idx_j];
+        if (!fi.is_stereo) continue;
+        double disp = fi.point.x() - fi.pointRight.x();
+        if (!std::isfinite(disp) || std::abs(disp) < 1e-4) continue;
+        double Z = baseline / disp;
+        if (!(Z > 1.0 && Z < 120.0)) continue;
+        Eigen::Vector3d P_i = Z * Eigen::Vector3d(fi.point.x(), fi.point.y(), 1.0);
+        bool ok=false; Eigen::Vector2d uh = predict(P_i, dx_r, dy_r, dth_r, ok);
+        if (!ok) continue;
+        Eigen::Vector2d e(fj.uv.x()-uh.x(), fj.uv.y()-uh.y());
+        // J_pose (2x3) finite diff
+        const double eps=1e-5; Eigen::Matrix<double,2,3> Jp; bool o2;
+        Jp.col(0) = (predict(P_i, dx_r+eps, dy_r, dth_r, o2) - uh)/eps;
+        Jp.col(1) = (predict(P_i, dx_r, dy_r+eps, dth_r, o2) - uh)/eps;
+        Jp.col(2) = (predict(P_i, dx_r, dy_r, dth_r+eps, o2) - uh)/eps;
+        Eigen::Matrix2d motion = Jp * Sig_m * Jp.transpose();
+        // depth term
+        double sig_disp = std::sqrt(2.0)*sigma_uv/fx; double sig_Z = (Z*Z/std::max(baseline,1e-6))*sig_disp;
+        double dZ = std::max(1e-4, 1e-3*Z);
+        Eigen::Vector3d P_i2 = (Z+dZ) * Eigen::Vector3d(fi.point.x(), fi.point.y(), 1.0);
+        Eigen::Vector2d Jd = (predict(P_i2, dx_r, dy_r, dth_r, o2) - uh)/dZ;
+        Eigen::Matrix2d depth = Jd * Jd.transpose() * (sig_Z*sig_Z);
+        Eigen::Matrix2d S = motion + depth + sig2*Eigen::Matrix2d::Identity();
+        double d2 = e.transpose() * S.inverse() * e;
+        if (!std::isfinite(d2) || d2 < 0) continue;
+        // floored mapping: features statistically consistent with static (d2 < thresh) keep reliability 1.0;
+        // only inconsistent features (d2 > chi2(2).95) are down-weighted. Avoids penalizing noisy-but-static feats.
+        double d2_excess = std::max(0.0, d2 - RELIABILITY_D2_THRESH);
+        double rel_raw = std::exp(-d2_excess / (2.0*RELIABILITY_KAPPA));
+        rel_raw = std::min(1.0, std::max(0.0, rel_raw));
+        // temporal memory: fast-down / slow-up
+        double prev = track_rel_.count(it.feature_id) ? track_rel_[it.feature_id] : 1.0;
+        double a = (rel_raw < prev) ? RELIABILITY_EMA_DOWN : RELIABILITY_EMA_UP;
+        double ema = a*rel_raw + (1.0-a)*prev;
+        track_rel_[it.feature_id] = std::max(RELIABILITY_FLOOR, std::min(1.0, ema));
+    }
+
+    // ---- anti-degeneracy: keep top-N current features (by track length) at weight 1.0 ----
+    std::vector<std::pair<int,int>> rank;   // (used_num, feature_id) for features observed this frame
+    for (auto &it : f_manager.feature)
+        if (it.endFrame() == j) rank.push_back({it.used_num, it.feature_id});
+    std::sort(rank.begin(), rank.end(), [](auto &a, auto &b){ return a.first > b.first; });
+    std::set<int> keep;
+    for (int k=0; k < (int)rank.size() && k < RELIABILITY_KEEPN; ++k) keep.insert(rank[k].second);
+
+    // ---- finalize feat_weight_cur_ for every feature in the window ----
+    for (auto &it : f_manager.feature)
+    {
+        double rel = track_rel_.count(it.feature_id) ? track_rel_[it.feature_id] : 1.0;
+        if (keep.count(it.feature_id)) rel = 1.0;
+        double w = std::sqrt(std::min(1.0, std::max(RELIABILITY_FLOOR, rel)));
+        feat_weight_cur_[it.feature_id] = w;
+        wmin = std::min(wmin, w); wmax = std::max(wmax, w);
+    }
+    if (!feat_weight_cur_.empty())
+        ROS_INFO("[reliability] feats=%zu w_range=[%.3f,%.3f] kappa=%.2f", feat_weight_cur_.size(), wmin, wmax, RELIABILITY_KAPPA);
 }
 
 void Estimator::computePendingFeatureStats(

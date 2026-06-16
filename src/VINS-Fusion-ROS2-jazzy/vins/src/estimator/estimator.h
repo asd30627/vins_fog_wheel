@@ -321,6 +321,13 @@ class Estimator
     void setupPerFeatLogger();
     void writePerFeatRows(double header);
 
+    // ===== P1-Reliability R3b: per-feature reliability weight =====
+    std::map<int, double> track_rel_;     // persistent per-track reliability (temporal memory)
+    std::map<int, double> feat_weight_cur_;  // feature_id -> sqrt(reliability) for the current optimization
+    bool reliability_intr_ready_ = false;
+    double rel_fx_ = 0, rel_fy_ = 0, rel_cx_ = 0, rel_cy_ = 0;
+    void computeFeatureReliability();     // fills feat_weight_cur_ (call at top of optimization when enabled)
+
     std::string reliability_run_id = "run_001";
     std::string reliability_dataset_name = "kaist";
     std::string reliability_sequence_name = "unknown_sequence";

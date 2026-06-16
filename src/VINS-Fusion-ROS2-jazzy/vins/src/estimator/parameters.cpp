@@ -57,6 +57,15 @@ int SAVE_PERFEAT_RELIABILITY = 0;   // P1-Reliability R1: per-feature read-only 
 // the optimization (keeps the reference INDEPENDENT of the estimator pose). Default OFF.
 int WHEEL_REFERENCE_ONLY = 0;
 int FOG_YAW_REFERENCE_ONLY = 0;
+// P1-Reliability R3b: per-feature reliability weight into the visual factor. Default OFF.
+int FEATURE_RELIABILITY_ENABLE = 0;
+double RELIABILITY_KAPPA = 8.0;          // gentler suppression beyond the threshold (offline-tuned)
+double RELIABILITY_D2_THRESH = 5.99;     // chi2(2).95: features with d2 below this are kept at reliability 1.0
+double RELIABILITY_SIGMA_UV = 3.0;
+double RELIABILITY_FLOOR = 0.05;
+int RELIABILITY_KEEPN = 30;
+double RELIABILITY_EMA_DOWN = 0.7;   // fast-down: ema = DOWN*new + (1-DOWN)*old  when new < old
+double RELIABILITY_EMA_UP = 0.1;     // slow-up:   ema = UP*new   + (1-UP)*old    when new >= old
 int POSE_COV_ENABLE = 0;   // DEFAULT OFF — expensive [pose-cov] DENSE_SVD diagnostic (Paper-2 Sigma_A only)
 int POSE_COV_EVERY_N = 1;
 // P1 (fwvio) factor switches — DEFAULT OFF. flags-off => baseline behaviour unchanged (bit-invariance guardrail).
@@ -219,6 +228,18 @@ void readParameters(std::string config_file)
     if (const char* e = std::getenv("REL_FOG_REFERENCE_ONLY"))
     { std::string v(e); FOG_YAW_REFERENCE_ONLY = (v=="1"||v=="true"||v=="on"||v=="ON") ? 1 : 0; }
     ROS_WARN("WHEEL_REFERENCE_ONLY: %d  FOG_YAW_REFERENCE_ONLY: %d", WHEEL_REFERENCE_ONLY, FOG_YAW_REFERENCE_ONLY);
+
+    // R3b reliability weighting (default OFF). Env overrides.
+    FEATURE_RELIABILITY_ENABLE = 0;
+    if (const char* e = std::getenv("REL_FEATURE_RELIABILITY"))
+    { std::string v(e); FEATURE_RELIABILITY_ENABLE = (v=="1"||v=="true"||v=="on"||v=="ON") ? 1 : 0; }
+    if (const char* e = std::getenv("REL_KAPPA"))    RELIABILITY_KAPPA = atof(e);
+    if (const char* e = std::getenv("REL_D2_THRESH")) RELIABILITY_D2_THRESH = atof(e);
+    if (const char* e = std::getenv("REL_SIGMA_UV")) RELIABILITY_SIGMA_UV = atof(e);
+    if (const char* e = std::getenv("REL_FLOOR"))    RELIABILITY_FLOOR = atof(e);
+    if (const char* e = std::getenv("REL_KEEPN"))    RELIABILITY_KEEPN = atoi(e);
+    ROS_WARN("FEATURE_RELIABILITY_ENABLE: %d kappa=%.2f d2_thresh=%.2f sigma_uv=%.2f floor=%.2f keepN=%d",
+             FEATURE_RELIABILITY_ENABLE, RELIABILITY_KAPPA, RELIABILITY_D2_THRESH, RELIABILITY_SIGMA_UV, RELIABILITY_FLOOR, RELIABILITY_KEEPN);
 
     // ===== [pose-cov] integrity diagnostic switch — DEFAULT OFF =====
     // The DENSE_SVD per-keyframe covariance is expensive and throttles VINS below real-time at
