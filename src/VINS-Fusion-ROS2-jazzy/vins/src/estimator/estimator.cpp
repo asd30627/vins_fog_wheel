@@ -3469,9 +3469,14 @@ void Estimator::computeFeatureReliability()
         if (!reliability_intr_ready_) return;   // wait until we can calibrate intrinsics
     }
 
+    // §2 ablation: weight signal source. motion (default) = INDEPENDENT wheel SE(2) reference (d2 of obs vs
+    // wheel-predicted reprojection); residual = the VIO's OWN reprojection residual (estimator relative pose, NO
+    // independent reference) -> isolates whether the *independent motion reference* is the key value, vs plain
+    // robust-residual culling (which the optimizer's Huber kernel already does).
+    const bool use_residual = RELIABILITY_WEIGHT_RESIDUAL;
     WheelPreintegration *wp = wheel_pre_integrations[j];
-    if (wp == nullptr || !wp->valid)
-        return;   // no independent reference this interval -> leave all weights at memory/1.0 (handled below)
+    if (!use_residual && (wp == nullptr || !wp->valid))
+        return;   // motion mode needs the independent reference this interval (residual mode does not)
 
     const double fx=rel_fx_, fy=rel_fy_, cx=rel_cx_, cy=rel_cy_;
     const double sigma_uv = RELIABILITY_SIGMA_UV, sig2 = sigma_uv*sigma_uv;
@@ -3479,23 +3484,34 @@ void Estimator::computeFeatureReliability()
     double baseline = (tic[0] - tic[1]).norm();
     Eigen::Matrix3d R_bc = ric[0]; Eigen::Vector3d t_bc = tic[0];
     Eigen::Matrix3d R_cb = R_bc.transpose(); Eigen::Vector3d t_cb = -R_cb * t_bc;
-    Eigen::Matrix3d Sig_m = wp->cov;   // 3x3 cov of (dx,dy,dtheta)
-    const double dx_r = wp->dx, dy_r = wp->dy, dth_r = wp->dtheta;
-    // P3 do-no-harm: add lever-arm reference-error. Treating rear-axle motion as body motion incurs a position
-    // error ~ L*dtheta during turns (physical); model it as honest motion uncertainty so high-turn intervals (where
-    // the frozen wheel reference mismatches, e.g. urban29/35) don't inflate d2 and over-penalize GOOD features.
-    // ONE global L (RELIABILITY_LEVER_ARM), adaptive to the interval's turning — NOT per-sequence tuning.
+    // motion reference (wheel SE(2)) state — only used in motion mode
+    Eigen::Matrix3d Sig_m = Eigen::Matrix3d::Identity();
+    double dx_r=0, dy_r=0, dth_r=0;
+    if (!use_residual)
     {
+        Sig_m = wp->cov;   // 3x3 cov of (dx,dy,dtheta)
+        dx_r = wp->dx; dy_r = wp->dy; dth_r = wp->dtheta;
+        // P3 do-no-harm: lever-arm reference-error (~L*dtheta during turns), ONE global L, adaptive to turning.
         double lever_err = RELIABILITY_LEVER_ARM * std::abs(dth_r);
         Sig_m(0,0) += lever_err * lever_err;
         Sig_m(1,1) += lever_err * lever_err;
     }
+    // estimator relative pose body_i -> body_j (residual mode reference = the VIO's own optimized motion)
+    Eigen::Matrix3d R_rel = Rs[j].transpose() * Rs[i];
+    Eigen::Vector3d t_rel = Rs[j].transpose() * (Ps[i] - Ps[j]);
 
-    auto predict = [&](const Eigen::Vector3d &P_i, double pdx, double pdy, double pdth, bool &ok) -> Eigen::Vector2d {
+    auto predict_wheel = [&](const Eigen::Vector3d &P_i, double pdx, double pdy, double pdth, bool &ok) -> Eigen::Vector2d {
         double c=std::cos(pdth), s=std::sin(pdth);
         Eigen::Matrix3d Rb; Rb << c,-s,0, s,c,0, 0,0,1;
         Eigen::Vector3d Pb_i = R_bc * P_i + t_bc;
         Eigen::Vector3d Pb_j = Rb * Pb_i + Eigen::Vector3d(pdx,pdy,0.0);
+        Eigen::Vector3d Pc_j = R_cb * Pb_j + t_cb;
+        if (Pc_j.z() <= 1e-6) { ok=false; return Eigen::Vector2d::Zero(); }
+        ok=true; return Eigen::Vector2d(fx*Pc_j.x()/Pc_j.z()+cx, fy*Pc_j.y()/Pc_j.z()+cy);
+    };
+    auto predict_est = [&](const Eigen::Vector3d &P_i, bool &ok) -> Eigen::Vector2d {
+        Eigen::Vector3d Pb_i = R_bc * P_i + t_bc;
+        Eigen::Vector3d Pb_j = R_rel * Pb_i + t_rel;
         Eigen::Vector3d Pc_j = R_cb * Pb_j + t_cb;
         if (Pc_j.z() <= 1e-6) { ok=false; return Eigen::Vector2d::Zero(); }
         ok=true; return Eigen::Vector2d(fx*Pc_j.x()/Pc_j.z()+cx, fy*Pc_j.y()/Pc_j.z()+cy);
@@ -3515,20 +3531,26 @@ void Estimator::computeFeatureReliability()
         double Z = baseline / disp;
         if (!(Z > 1.0 && Z < 120.0)) continue;
         Eigen::Vector3d P_i = Z * Eigen::Vector3d(fi.point.x(), fi.point.y(), 1.0);
-        bool ok=false; Eigen::Vector2d uh = predict(P_i, dx_r, dy_r, dth_r, ok);
+        bool ok=false; Eigen::Vector2d uh = use_residual ? predict_est(P_i, ok) : predict_wheel(P_i, dx_r, dy_r, dth_r, ok);
         if (!ok) continue;
         Eigen::Vector2d e(fj.uv.x()-uh.x(), fj.uv.y()-uh.y());
-        // J_pose (2x3) finite diff
-        const double eps=1e-5; Eigen::Matrix<double,2,3> Jp; bool o2;
-        Jp.col(0) = (predict(P_i, dx_r+eps, dy_r, dth_r, o2) - uh)/eps;
-        Jp.col(1) = (predict(P_i, dx_r, dy_r+eps, dth_r, o2) - uh)/eps;
-        Jp.col(2) = (predict(P_i, dx_r, dy_r, dth_r+eps, o2) - uh)/eps;
-        Eigen::Matrix2d motion = Jp * Sig_m * Jp.transpose();
+        // motion term: ONLY in motion mode (independent wheel reference has a 3x3 cov). residual mode has no
+        // independent motion uncertainty (the residual is taken vs the estimator's own pose).
+        Eigen::Matrix2d motion = Eigen::Matrix2d::Zero();
+        if (!use_residual)
+        {
+            const double eps=1e-5; Eigen::Matrix<double,2,3> Jp; bool o2;
+            Jp.col(0) = (predict_wheel(P_i, dx_r+eps, dy_r, dth_r, o2) - uh)/eps;
+            Jp.col(1) = (predict_wheel(P_i, dx_r, dy_r+eps, dth_r, o2) - uh)/eps;
+            Jp.col(2) = (predict_wheel(P_i, dx_r, dy_r, dth_r+eps, o2) - uh)/eps;
+            motion = Jp * Sig_m * Jp.transpose();
+        }
         // depth term
         double sig_disp = std::sqrt(2.0)*sigma_uv/fx; double sig_Z = (Z*Z/std::max(baseline,1e-6))*sig_disp;
         double dZ = std::max(1e-4, 1e-3*Z);
         Eigen::Vector3d P_i2 = (Z+dZ) * Eigen::Vector3d(fi.point.x(), fi.point.y(), 1.0);
-        Eigen::Vector2d Jd = (predict(P_i2, dx_r, dy_r, dth_r, o2) - uh)/dZ;
+        bool o3; Eigen::Vector2d uh2 = use_residual ? predict_est(P_i2, o3) : predict_wheel(P_i2, dx_r, dy_r, dth_r, o3);
+        Eigen::Vector2d Jd = (uh2 - uh)/dZ;
         Eigen::Matrix2d depth = Jd * Jd.transpose() * (sig_Z*sig_Z);
         Eigen::Matrix2d S = motion + depth + sig2*Eigen::Matrix2d::Identity();
         double d2 = e.transpose() * S.inverse() * e;
