@@ -69,7 +69,8 @@ extern int FOG_YAW_REFERENCE_ONLY;     // P1-Reliability R2: build+log FOG prein
 // P1-Reliability R3b: per-feature reliability weight into visual factor (default OFF)
 extern int FEATURE_RELIABILITY_ENABLE;
 extern double RELIABILITY_KAPPA;
-extern double RELIABILITY_D2_THRESH;   // chi2(2).95 floor: d2<thresh -> reliability 1.0
+extern double RELIABILITY_D2_THRESH;   // chi2(2).99 floor: d2<thresh -> reliability 1.0
+extern double RELIABILITY_LEVER_ARM;   // P3: rear-axle lever arm [m] for adaptive reference-error cov
 extern double RELIABILITY_SIGMA_UV;
 extern double RELIABILITY_FLOOR;
 extern int RELIABILITY_KEEPN;

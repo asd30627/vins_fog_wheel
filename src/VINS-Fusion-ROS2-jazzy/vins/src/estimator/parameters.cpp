@@ -60,7 +60,9 @@ int FOG_YAW_REFERENCE_ONLY = 0;
 // P1-Reliability R3b: per-feature reliability weight into the visual factor. Default OFF.
 int FEATURE_RELIABILITY_ENABLE = 0;
 double RELIABILITY_KAPPA = 8.0;          // gentler suppression beyond the threshold (offline-tuned)
-double RELIABILITY_D2_THRESH = 5.99;     // chi2(2).95: features with d2 below this are kept at reliability 1.0
+double RELIABILITY_D2_THRESH = 9.21;     // P3: chi2(2).99 (theoretical) — keep more good static feats at 1.0
+double RELIABILITY_LEVER_ARM = 0.0;      // LOCKED τ-only: lever-arm OFF by default (rejected — caused urban28
+                                         // early-stop). Kept as env-option (REL_LEVER_ARM) for ablation only.
 double RELIABILITY_SIGMA_UV = 3.0;
 double RELIABILITY_FLOOR = 0.05;
 int RELIABILITY_KEEPN = 30;
@@ -235,6 +237,7 @@ void readParameters(std::string config_file)
     { std::string v(e); FEATURE_RELIABILITY_ENABLE = (v=="1"||v=="true"||v=="on"||v=="ON") ? 1 : 0; }
     if (const char* e = std::getenv("REL_KAPPA"))    RELIABILITY_KAPPA = atof(e);
     if (const char* e = std::getenv("REL_D2_THRESH")) RELIABILITY_D2_THRESH = atof(e);
+    if (const char* e = std::getenv("REL_LEVER_ARM")) RELIABILITY_LEVER_ARM = atof(e);
     if (const char* e = std::getenv("REL_SIGMA_UV")) RELIABILITY_SIGMA_UV = atof(e);
     if (const char* e = std::getenv("REL_FLOOR"))    RELIABILITY_FLOOR = atof(e);
     if (const char* e = std::getenv("REL_KEEPN"))    RELIABILITY_KEEPN = atoi(e);

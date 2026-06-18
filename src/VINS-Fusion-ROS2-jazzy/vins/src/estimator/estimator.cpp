@@ -3420,6 +3420,15 @@ void Estimator::computeFeatureReliability()
     Eigen::Matrix3d R_cb = R_bc.transpose(); Eigen::Vector3d t_cb = -R_cb * t_bc;
     Eigen::Matrix3d Sig_m = wp->cov;   // 3x3 cov of (dx,dy,dtheta)
     const double dx_r = wp->dx, dy_r = wp->dy, dth_r = wp->dtheta;
+    // P3 do-no-harm: add lever-arm reference-error. Treating rear-axle motion as body motion incurs a position
+    // error ~ L*dtheta during turns (physical); model it as honest motion uncertainty so high-turn intervals (where
+    // the frozen wheel reference mismatches, e.g. urban29/35) don't inflate d2 and over-penalize GOOD features.
+    // ONE global L (RELIABILITY_LEVER_ARM), adaptive to the interval's turning — NOT per-sequence tuning.
+    {
+        double lever_err = RELIABILITY_LEVER_ARM * std::abs(dth_r);
+        Sig_m(0,0) += lever_err * lever_err;
+        Sig_m(1,1) += lever_err * lever_err;
+    }
 
     auto predict = [&](const Eigen::Vector3d &P_i, double pdx, double pdy, double pdth, bool &ok) -> Eigen::Vector2d {
         double c=std::cos(pdth), s=std::sin(pdth);
