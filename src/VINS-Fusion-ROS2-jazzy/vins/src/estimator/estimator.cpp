@@ -940,6 +940,52 @@ void Estimator::changeSensorType(int use_imu, int use_stereo)
     }
 }
 
+// §2 controlled dynamic injection: add a coherent synthetic moving block to the feature frame (leak-free; the
+// estimator/RANSAC sees them as ordinary features; ids>=INJ_ID_BASE are the non-circular labels). Simulates a rigid
+// moving object: a block of features at depth Z drifting coherently in the image (inconsistent with ego motion).
+void Estimator::injectDynamicFeatures(std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame, double t)
+{
+    if (featureFrame.empty()) return;
+    // Only contaminate a CONVERGED estimator (realistic: a running vehicle meets dynamic objects). Injecting during
+    // bootstrap poisons the SfM/IMU init and just kills the run -> no measurable degradation curve.
+    if (solver_flag != NON_LINEAR) { inj_init_ = false; return; }
+    // recover intrinsics from REAL features (u = fx*nx + cx)
+    double Sx=0,Sxx=0,Su=0,Sxu=0, Sy=0,Syy=0,Sv=0,Syv=0; long N=0;
+    for (auto &kv : featureFrame) {
+        if (kv.first >= INJ_ID_BASE) continue;
+        for (auto &obs : kv.second) if (obs.first==0) {
+            double nx=obs.second(0),ny=obs.second(1),u=obs.second(3),v=obs.second(4);
+            Sx+=nx;Sxx+=nx*nx;Su+=u;Sxu+=nx*u; Sy+=ny;Syy+=ny*ny;Sv+=v;Syv+=ny*v; N++;
+        }
+    }
+    if (N < 20) return;
+    double dxd=N*Sxx-Sx*Sx, dyd=N*Syy-Sy*Sy;
+    if (std::abs(dxd)<1e-9||std::abs(dyd)<1e-9) return;
+    double fx=(N*Sxu-Sx*Su)/dxd, cx=(Su-fx*Sx)/N, fy=(N*Syv-Sy*Sv)/dyd, cy=(Sv-fy*Sy)/N;
+    int K = std::max(1, (int)(REL_INJECT_FRAC * N));
+    const double Z=15.0, baseline=0.47, disp=baseline/Z;   // KAIST stereo baseline ~0.47m -> normalized disparity
+    // coherent block image-plane drift per frame (moving object); normalized. env REL_INJECT_DRIFT overrides (default ~13px@fx818).
+    static double vinj_x = []{ const char* e=std::getenv("REL_INJECT_DRIFT"); return e? atof(e):0.016; }();
+    const double vinj_y = 0.2*vinj_x;
+    if (!inj_init_ || (int)inj_nxny_.size()!=K) {
+        inj_nxny_.clear();
+        int cols=std::max(1,(int)std::ceil(std::sqrt((double)K)));
+        for (int i=0;i<K;i++) inj_nxny_.push_back({-0.10+0.30*((i%cols)/(double)std::max(cols-1,1)),
+                                                   -0.10+0.20*((i/cols)/(double)std::max(cols-1,1))});
+        inj_init_=true;
+    }
+    for (auto &p : inj_nxny_){ p.first+=vinj_x; p.second+=vinj_y; }
+    if (inj_nxny_[0].first > 0.5) for (auto &p : inj_nxny_) p.first -= 0.6;   // recycle when off-frame
+    bool stereo = STEREO;
+    for (int i=0;i<K;i++){
+        double nx=inj_nxny_[i].first, ny=inj_nxny_[i].second;
+        Eigen::Matrix<double,7,1> f0; f0<<nx,ny,1.0, fx*nx+cx, fy*ny+cy, 0.0,0.0;
+        std::vector<std::pair<int,Eigen::Matrix<double,7,1>>> obs; obs.push_back({0,f0});
+        if (stereo){ double nxr=nx-disp; Eigen::Matrix<double,7,1> f1; f1<<nxr,ny,1.0, fx*nxr+cx, fy*ny+cy,0.0,0.0; obs.push_back({1,f1}); }
+        featureFrame[INJ_ID_BASE+i]=obs;
+    }
+}
+
 void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
 {
     inputImageCnt++;
@@ -950,6 +996,11 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
         featureFrame = featureTracker.trackImage(t, _img);
     else
         featureFrame = featureTracker.trackImage(t, _img, _img1);
+
+    // §2 controlled dynamic injection (leak-free, default OFF): add a coherent synthetic moving block BEFORE the
+    // estimator/RANSAC sees it. The estimator is blind to which are injected (ids>=INJ_ID_BASE used only for labels).
+    if (REL_INJECT_DYNAMIC)
+        injectDynamicFeatures(featureFrame, t);
 
     double tracker_ms = featureTrackerTime.toc();
     if (SAVE_RELIABILITY_FEATURES)
@@ -1581,7 +1632,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                     frame_it->second.T = Ps[i];
                     i++;
                 }
-                solveGyroscopeBias(all_image_frame, Bgs);
+                // CARLA fix-bias (experimental, REL_FIX_IMU_BIAS=1, default OFF): skip init gyro-bias estimation
+                // (synth IMU has true bias 0) so init cannot mis-estimate gravity-into-bias.
+                static int FIX_BIAS_INIT = []{ const char* e=std::getenv("REL_FIX_IMU_BIAS"); return (e && std::string(e)=="1")?1:0; }();
+                if (!FIX_BIAS_INIT)
+                    solveGyroscopeBias(all_image_frame, Bgs);
                 for (int i = 0; i <= WINDOW_SIZE; i++)
                 {
                     pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
@@ -2096,6 +2151,11 @@ void Estimator::double2vector()
                                             para_SpeedBias[i][1],
                                             para_SpeedBias[i][2]);
 
+                // CARLA fix-bias (experimental, env REL_FIX_IMU_BIAS=1, default OFF): synth IMU from GT has TRUE
+                // bias 0 -> pin Bas/Bgs to 0 so VINS init cannot mis-estimate gravity-into-bias (the CARLA failure).
+                static int FIX_BIAS = []{ const char* e=std::getenv("REL_FIX_IMU_BIAS"); return (e && std::string(e)=="1")?1:0; }();
+                if (FIX_BIAS) { Bas[i].setZero(); Bgs[i].setZero(); }
+                else {
                 Bas[i] = Vector3d(para_SpeedBias[i][3],
                                   para_SpeedBias[i][4],
                                   para_SpeedBias[i][5]);
@@ -2103,6 +2163,7 @@ void Estimator::double2vector()
                 Bgs[i] = Vector3d(para_SpeedBias[i][6],
                                   para_SpeedBias[i][7],
                                   para_SpeedBias[i][8]);
+                }
             
         }
     }

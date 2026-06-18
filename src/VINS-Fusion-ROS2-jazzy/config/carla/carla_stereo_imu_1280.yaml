@@ -1,0 +1,67 @@
+%YAML:1.0
+
+# CARLA dynamic_dense stereo+IMU (1280x720). IMU is co-located with cam0 (collect_carla.py: IMU spawned at tf_l),
+# ego-axes (x-fwd,y-right,z-up). body = IMU frame. So body_T_cam0 = [R_bo | 0] (co-located),
+# body_T_cam1 = [R_bo | (0,0.5,0)] (right cam +0.5m along body-Y). Stereo-inertial = robust mode (fixes the
+# stereo-only degenerate-prior scale-runaway).
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+output_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/"
+
+cam0_calib: "cam0_pinhole_1280.yaml"
+cam1_calib: "cam1_pinhole_1280.yaml"
+image_width: 1280
+image_height: 720
+
+estimate_extrinsic: 0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 0.0,
+           1, 0, 0, 0.0,
+           0,-1, 0, 0.0,
+           0, 0, 0, 1   ]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 0.0,
+           1, 0, 0, 0.5,
+           0,-1, 0, 0.0,
+           0, 0, 0, 1   ]
+
+multiple_thread: 0
+
+#feature tracker
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 0
+flow_back: 1
+
+#imu noise (CARLA IMU; from existing carla_stereo_imu_config)
+acc_n: 0.1
+gyr_n: 0.01
+acc_w: 0.001
+gyr_w: 0.0001
+g_norm: 9.81
+
+#optimization
+max_solver_time: 0.08
+max_num_iterations: 10
+keyframe_parallax: 10.0
+
+estimate_td: 0
+td: 0.0
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/pose_graph/"
+save_image: 0
+visualize_imu_forward: 0
+visualize_camera_size: 0.4

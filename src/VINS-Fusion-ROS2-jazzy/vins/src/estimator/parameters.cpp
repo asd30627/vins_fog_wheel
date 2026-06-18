@@ -68,6 +68,9 @@ double RELIABILITY_FLOOR = 0.05;
 int RELIABILITY_KEEPN = 30;
 double RELIABILITY_EMA_DOWN = 0.7;   // fast-down: ema = DOWN*new + (1-DOWN)*old  when new < old
 double RELIABILITY_EMA_UP = 0.1;     // slow-up:   ema = UP*new   + (1-UP)*old    when new >= old
+// §2 controlled dynamic injection (leak-free; synthetic coherent moving block). Default OFF.
+int REL_INJECT_DYNAMIC = 0;
+double REL_INJECT_FRAC = 0.2;        // synthetic features as a fraction of the real feature count
 int POSE_COV_ENABLE = 0;   // DEFAULT OFF — expensive [pose-cov] DENSE_SVD diagnostic (Paper-2 Sigma_A only)
 int POSE_COV_EVERY_N = 1;
 // P1 (fwvio) factor switches — DEFAULT OFF. flags-off => baseline behaviour unchanged (bit-invariance guardrail).
@@ -243,6 +246,10 @@ void readParameters(std::string config_file)
     if (const char* e = std::getenv("REL_KEEPN"))    RELIABILITY_KEEPN = atoi(e);
     ROS_WARN("FEATURE_RELIABILITY_ENABLE: %d kappa=%.2f d2_thresh=%.2f sigma_uv=%.2f floor=%.2f keepN=%d",
              FEATURE_RELIABILITY_ENABLE, RELIABILITY_KAPPA, RELIABILITY_D2_THRESH, RELIABILITY_SIGMA_UV, RELIABILITY_FLOOR, RELIABILITY_KEEPN);
+    REL_INJECT_DYNAMIC = 0;
+    if (const char* e = std::getenv("REL_INJECT_DYNAMIC")) { std::string v(e); REL_INJECT_DYNAMIC = (v=="1"||v=="true"||v=="on") ? 1 : 0; }
+    if (const char* e = std::getenv("REL_INJECT_FRAC")) REL_INJECT_FRAC = atof(e);
+    ROS_WARN("REL_INJECT_DYNAMIC: %d frac=%.2f", REL_INJECT_DYNAMIC, REL_INJECT_FRAC);
 
     // ===== [pose-cov] integrity diagnostic switch — DEFAULT OFF =====
     // The DENSE_SVD per-keyframe covariance is expensive and throttles VINS below real-time at

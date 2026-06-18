@@ -1,0 +1,60 @@
+%YAML:1.0
+
+# CARLA dynamic_dense (1280x720, fov90) stereo-only VINS config. Built for §2 baseline-sanity.
+# body = CARLA vehicle frame (X-fwd, Y-right, Z-up). Camera optical = CV (x-right,y-down,z-fwd).
+# Mounting (from collect_carla.py): left (1.5,-0.25,1.6), right (1.5,+0.25,1.6) -> 0.5 m baseline along body-Y.
+imu: 0
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+output_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/"
+
+cam0_calib: "cam0_pinhole_1280.yaml"
+cam1_calib: "cam1_pinhole_1280.yaml"
+image_width: 1280
+image_height: 720
+
+estimate_extrinsic: 0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0,-0.25,
+           0,-1, 0, 1.6,
+           0, 0, 0, 1   ]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           1, 0, 0, 0.25,
+           0,-1, 0, 1.6,
+           0, 0, 0, 1   ]
+
+# single-thread: deterministic + avoids the known CARLA stereo thread-race scale-runaway basin
+multiple_thread: 0
+
+#feature tracker
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 0
+flow_back: 1
+
+#optimization
+max_solver_time: 0.08
+max_num_iterations: 10
+keyframe_parallax: 10.0
+
+estimate_td: 0
+td: 0.0
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/pose_graph/"
+save_image: 0
+visualize_imu_forward: 0
+visualize_camera_size: 0.4

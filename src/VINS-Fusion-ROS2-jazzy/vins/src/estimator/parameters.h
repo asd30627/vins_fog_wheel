@@ -76,6 +76,8 @@ extern double RELIABILITY_FLOOR;
 extern int RELIABILITY_KEEPN;
 extern double RELIABILITY_EMA_DOWN;
 extern double RELIABILITY_EMA_UP;
+extern int REL_INJECT_DYNAMIC;       // §2 controlled dynamic injection (default OFF)
+extern double REL_INJECT_FRAC;
 // [pose-cov] integrity diagnostic switch (DEFAULT OFF; expensive DENSE_SVD covariance per keyframe).
 extern int POSE_COV_ENABLE;
 extern int POSE_COV_EVERY_N;

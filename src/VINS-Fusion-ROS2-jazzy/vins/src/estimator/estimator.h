@@ -328,6 +328,12 @@ class Estimator
     double rel_fx_ = 0, rel_fy_ = 0, rel_cx_ = 0, rel_cy_ = 0;
     void computeFeatureReliability();     // fills feat_weight_cur_ (call at top of optimization when enabled)
 
+    // §2 controlled dynamic injection (leak-free; coherent synthetic moving block; ids >= INJ_ID_BASE)
+    static const int INJ_ID_BASE = 900000;
+    std::vector<std::pair<double,double>> inj_nxny_;   // current synthetic block normalized positions
+    bool inj_init_ = false;
+    void injectDynamicFeatures(std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame, double t);
+
     std::string reliability_run_id = "run_001";
     std::string reliability_dataset_name = "kaist";
     std::string reliability_sequence_name = "unknown_sequence";
