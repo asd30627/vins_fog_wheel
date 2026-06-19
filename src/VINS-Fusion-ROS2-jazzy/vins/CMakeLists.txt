@@ -35,6 +35,11 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
+# v11 learned ReliabilityNet: vendored ONNX Runtime (headers + lib in <ws>/third_party). Default-OFF at runtime.
+set(ORT_ROOT ${PROJECT_SOURCE_DIR}/../../../third_party/onnxruntime-linux-x64-1.19.2)
+include_directories(${ORT_ROOT}/include)
+link_directories(${ORT_ROOT}/lib)
+
 
 add_library(vins_lib
     src/estimator/parameters.cpp
@@ -53,7 +58,8 @@ add_library(vins_lib
     src/initial/initial_sfm.cpp
     src/initial/initial_ex_rotation.cpp
     src/featureTracker/feature_tracker.cpp)
-target_link_libraries(vins_lib  ${OpenCV_LIBS} ${CERES_LIBRARIES})
+target_link_libraries(vins_lib  ${OpenCV_LIBS} ${CERES_LIBRARIES} ${ORT_ROOT}/lib/libonnxruntime.so)
+set_target_properties(vins_lib PROPERTIES INSTALL_RPATH "${ORT_ROOT}/lib" BUILD_WITH_INSTALL_RPATH TRUE)
 
 ament_target_dependencies(vins_lib rclcpp rcpputils std_msgs visualization_msgs geometry_msgs nav_msgs tf2 tf2_ros cv_bridge camera_models image_transport)
 
@@ -62,7 +68,8 @@ target_include_directories(test_wheel PRIVATE ${EIGEN3_INCLUDE_DIR})
 
 add_executable(vins_node src/rosNodeTest.cpp)
 ament_target_dependencies(vins_node rclcpp rcpputils std_msgs visualization_msgs geometry_msgs nav_msgs tf2 tf2_ros cv_bridge camera_models image_transport)
-target_link_libraries(vins_node vins_lib) 
+target_link_libraries(vins_node vins_lib ${ORT_ROOT}/lib/libonnxruntime.so)
+set_target_properties(vins_node PROPERTIES INSTALL_RPATH "${ORT_ROOT}/lib" BUILD_WITH_INSTALL_RPATH TRUE)
 
 add_executable(kitti_odom_test src/KITTIOdomTest.cpp)
 ament_target_dependencies(kitti_odom_test rclcpp rcpputils std_msgs visualization_msgs geometry_msgs nav_msgs tf2 tf2_ros cv_bridge camera_models image_transport)

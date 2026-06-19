@@ -79,6 +79,8 @@ extern double RELIABILITY_EMA_UP;
 extern int REL_INJECT_DYNAMIC;       // §2 controlled dynamic injection (default OFF)
 extern double REL_INJECT_FRAC;
 extern int RELIABILITY_WEIGHT_RESIDUAL;  // §2 ablation: 0=motion(wheel-ref d2, default), 1=residual(VIO own reproj)
+extern int REL_USE_LEARNED_MODEL;        // v11: 0=hand d2 (default), 1=learned ONNX ReliabilityNet
+extern std::string REL_ONNX_PATH;        // path to reliability_perfeat.onnx
 // [pose-cov] integrity diagnostic switch (DEFAULT OFF; expensive DENSE_SVD covariance per keyframe).
 extern int POSE_COV_ENABLE;
 extern int POSE_COV_EVERY_N;

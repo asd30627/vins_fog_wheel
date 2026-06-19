@@ -13,6 +13,7 @@
 // See the repository root LICENSE and THIRD_PARTY_NOTICES.md.
 #include "estimator.h"
 #include "../utility/visualization.h"
+#include <onnxruntime_cxx_api.h>   // v11 learned ReliabilityNet (REL_USE_LEARNED_MODEL)
 
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
@@ -3437,6 +3438,88 @@ void Estimator::writePerFeatRows(double header)
 // fast-down/slow-up) + anti-degeneracy (floor + keep-top-N). Fills feat_weight_cur_[feature_id] = sqrt(reliability).
 // Bounded by construction: reliability in (0,1], floored -> cannot blow up like the FOG factor.
 // ============================================================================
+// v11 learned ReliabilityNet: per-feature weight from an ONNX model (PerFeatNet). Features [reproj,ex,ey,log1p(track),
+// nx,ny] = the SAME wheel-reprojection geometry the d2 path computes; normalization + logit->weight baked into the ONNX.
+// Default OFF (REL_USE_LEARNED_MODEL); any failure -> leave weights at 1.0 (do-no-harm).
+void Estimator::computeFeatureReliability_learned()
+{
+    static Ort::Env* g_env = nullptr; static Ort::Session* g_sess = nullptr;
+    static bool g_ready = false, g_tried = false;
+    if (!g_tried) {
+        g_tried = true;
+        try {
+            g_env = new Ort::Env(ORT_LOGGING_LEVEL_WARNING, "rel");
+            Ort::SessionOptions so; so.SetIntraOpNumThreads(1);
+            g_sess = new Ort::Session(*g_env, REL_ONNX_PATH.c_str(), so);
+            g_ready = true;
+            ROS_WARN("[reliability-learned] ONNX ready: %s", REL_ONNX_PATH.c_str());
+        } catch (const std::exception& e) { ROS_ERROR("[reliability-learned] ONNX load FAILED (%s) -> w=1.0", e.what()); }
+    }
+    if (!g_ready) return;
+    const int j = frame_count, i = frame_count - 1;
+    if (!reliability_intr_ready_) {
+        double Sx=0,Sxx=0,Su=0,Sxu=0, Sy=0,Syy=0,Sv=0,Syv=0; long N=0;
+        for (auto &it : f_manager.feature) for (auto &f : it.feature_per_frame) {
+            double nx=f.point.x(),ny=f.point.y(),u=f.uv.x(),v=f.uv.y();
+            Sx+=nx;Sxx+=nx*nx;Su+=u;Sxu+=nx*u; Sy+=ny;Syy+=ny*ny;Sv+=v;Syv+=ny*v; N++; }
+        if (N>50){ double dx=N*Sxx-Sx*Sx,dy=N*Syy-Sy*Sy;
+            if (std::abs(dx)>1e-9&&std::abs(dy)>1e-9){ rel_fx_=(N*Sxu-Sx*Su)/dx; rel_cx_=(Su-rel_fx_*Sx)/N;
+                rel_fy_=(N*Syv-Sy*Sv)/dy; rel_cy_=(Sv-rel_fy_*Sy)/N; reliability_intr_ready_=(rel_fx_>1.0&&rel_fy_>1.0);} }
+        if (!reliability_intr_ready_) return;
+    }
+    WheelPreintegration *wp = wheel_pre_integrations[j];
+    if (wp==nullptr || !wp->valid) return;
+    const double fx=rel_fx_,fy=rel_fy_,cx=rel_cx_,cy=rel_cy_;
+    double baseline=(tic[0]-tic[1]).norm();
+    Eigen::Matrix3d R_bc=ric[0]; Eigen::Vector3d t_bc=tic[0];
+    Eigen::Matrix3d R_cb=R_bc.transpose(); Eigen::Vector3d t_cb=-R_cb*t_bc;
+    double dx_r=wp->dx,dy_r=wp->dy,dth_r=wp->dtheta;
+    auto predict=[&](const Eigen::Vector3d&P_i,double pdx,double pdy,double pdth,bool&ok)->Eigen::Vector2d{
+        double c=std::cos(pdth),s=std::sin(pdth); Eigen::Matrix3d Rb; Rb<<c,-s,0,s,c,0,0,0,1;
+        Eigen::Vector3d Pb_i=R_bc*P_i+t_bc; Eigen::Vector3d Pb_j=Rb*Pb_i+Eigen::Vector3d(pdx,pdy,0.0);
+        Eigen::Vector3d Pc_j=R_cb*Pb_j+t_cb; if(Pc_j.z()<=1e-6){ok=false;return Eigen::Vector2d::Zero();}
+        ok=true; return Eigen::Vector2d(fx*Pc_j.x()/Pc_j.z()+cx,fy*Pc_j.y()/Pc_j.z()+cy); };
+    std::vector<float> feats; std::vector<int> fids; feats.reserve(2048);
+    for (auto &it : f_manager.feature) {
+        const int sf=it.start_frame, idx_i=i-sf, idx_j=j-sf;
+        const int n=(int)it.feature_per_frame.size();
+        if (idx_i<0||idx_j<0||idx_j>=n) continue;
+        const FeaturePerFrame &fi=it.feature_per_frame[idx_i], &fj=it.feature_per_frame[idx_j];
+        if (!fi.is_stereo) continue;
+        double disp=fi.point.x()-fi.pointRight.x(); if(!std::isfinite(disp)||std::abs(disp)<1e-4) continue;
+        double Z=baseline/disp; if(!(Z>1.0&&Z<120.0)) continue;
+        Eigen::Vector3d P_i=Z*Eigen::Vector3d(fi.point.x(),fi.point.y(),1.0);
+        bool ok=false; Eigen::Vector2d uh=predict(P_i,dx_r,dy_r,dth_r,ok); if(!ok) continue;
+        Eigen::Vector2d e(fj.uv.x()-uh.x(), fj.uv.y()-uh.y());
+        feats.push_back((float)e.norm()); feats.push_back((float)e.x()); feats.push_back((float)e.y());
+        feats.push_back((float)std::log1p((double)it.used_num)); feats.push_back((float)fi.point.x()); feats.push_back((float)fi.point.y());
+        fids.push_back(it.feature_id);
+    }
+    if (fids.empty()) return;
+    std::vector<float> wout(fids.size(), 1.0f);
+    try {
+        Ort::MemoryInfo mi = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        std::array<int64_t,2> shape{(int64_t)fids.size(), 6};
+        Ort::Value in = Ort::Value::CreateTensor<float>(mi, feats.data(), feats.size(), shape.data(), 2);
+        const char* innames[]={"feat"}; const char* outnames[]={"weight"};
+        auto out = g_sess->Run(Ort::RunOptions{nullptr}, innames, &in, 1, outnames, 1);
+        float* wd = out[0].GetTensorMutableData<float>();
+        for (size_t k=0;k<fids.size();++k) wout[k]=wd[k];
+    } catch (const std::exception& e) { ROS_ERROR("[reliability-learned] inference failed: %s", e.what()); return; }
+    std::vector<std::pair<int,int>> rank;
+    for (auto &it : f_manager.feature) if (it.endFrame()==j) rank.push_back({it.used_num, it.feature_id});
+    std::sort(rank.begin(),rank.end(),[](auto&a,auto&b){return a.first>b.first;});
+    std::set<int> keep; for (int k=0;k<(int)rank.size()&&k<RELIABILITY_KEEPN;++k) keep.insert(rank[k].second);
+    double wmin=1e9,wmax=-1e9;
+    for (size_t k=0;k<fids.size();++k){
+        double w = std::min(1.0,std::max((double)RELIABILITY_FLOOR,(double)wout[k]));
+        if (keep.count(fids[k])) w=1.0;
+        feat_weight_cur_[fids[k]]=w; wmin=std::min(wmin,w); wmax=std::max(wmax,w);
+    }
+    if (!feat_weight_cur_.empty())
+        ROS_INFO("[reliability-learned] feats=%zu w_range=[%.3f,%.3f] (ONNX)", feat_weight_cur_.size(), wmin, wmax);
+}
+
 void Estimator::computeFeatureReliability()
 {
     feat_weight_cur_.clear();
@@ -3445,6 +3528,7 @@ void Estimator::computeFeatureReliability()
     const int j = frame_count, i = frame_count - 1;
     if (i < 0)
         return;
+    if (REL_USE_LEARNED_MODEL) { computeFeatureReliability_learned(); return; }
 
     // ---- recover pinhole intrinsics once (u = fx*nx + cx) from real observations ----
     if (!reliability_intr_ready_)

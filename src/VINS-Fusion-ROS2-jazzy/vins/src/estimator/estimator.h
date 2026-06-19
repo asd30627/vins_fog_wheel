@@ -327,6 +327,7 @@ class Estimator
     bool reliability_intr_ready_ = false;
     double rel_fx_ = 0, rel_fy_ = 0, rel_cx_ = 0, rel_cy_ = 0;
     void computeFeatureReliability();     // fills feat_weight_cur_ (call at top of optimization when enabled)
+    void computeFeatureReliability_learned();  // v11: learned ONNX ReliabilityNet branch (REL_USE_LEARNED_MODEL)
 
     // §2 controlled dynamic injection (leak-free; coherent synthetic moving block; ids >= INJ_ID_BASE)
     static const int INJ_ID_BASE = 900000;
