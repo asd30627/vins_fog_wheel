@@ -111,3 +111,15 @@ All gated evaluations (PRE-TASK 0, do-no-harm, win) SHALL be multi-rep and isola
 - **WHEN** PRE-TASK 0 has fixed the win threshold and the corruption sequence list
 - **THEN** neither is changed mid-evaluation
 - **AND** both pass and fail outcomes are reported faithfully
+
+### Requirement: LOSO evaluation — gate numbers come only from held-out folds
+Route C SHALL be evaluated leave-one-sequence-out (LOSO): the ATE reported for any gate sequence (win or do-no-harm) SHALL come ONLY from a model whose training set EXCLUDED that sequence. A single all-data model MAY additionally be trained as the **deployment deliverable**, but it SHALL be labeled deployment-only and SHALL NOT be used for any win or do-no-harm claim (it has seen every sequence — using it would be train-on-test leakage). The win-gate number SHALL come exclusively from LOSO held-out folds. Held-out / fixed splits that move dynamic-heavy sequences out of training are NOT used (they would weaken the dynamic→anisotropy signal the net must learn); LOSO keeps the other dynamic sequences in each fold's training set.
+
+#### Scenario: Win number is from a held-out fold
+- **WHEN** the win gate reports an ATE on urban35-seoul / urban31-gangnam / urban36-seoul
+- **THEN** that number comes from a LOSO fold whose training set excluded that exact sequence
+
+#### Scenario: Deployment model is never a gate claim
+- **WHEN** an all-data (deployment) model exists
+- **THEN** it is labeled deployment-only
+- **AND** it is never used for any win or do-no-harm number
