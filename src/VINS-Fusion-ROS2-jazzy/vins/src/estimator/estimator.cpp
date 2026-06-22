@@ -3584,6 +3584,9 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
 {
     static Ort::Env* g_env=nullptr; static Ort::Session* g_sess=nullptr; static bool g_ready=false, g_tried=false;
     const bool use_net = REL_USE_LEARNED_MODEL && !REL_ONNX_PATH.empty();
+    // Route C site d: A+ motion inputs, env-gated RC_APLUS=1. Default OFF -> 10-dim geom, bit-identical to dd8d1e0.
+    // ON -> append 5 A+ [vx_j,vy_j,w_dx,w_dy,w_dtheta] (10->15); needs a 15-dim ONNX (else Run throws -> hand cov).
+    static const bool RC_APLUS = [](){ const char* e=std::getenv("RC_APLUS"); return e && std::atoi(e)>0; }();
     if (use_net && !g_tried) { g_tried=true;
         try { g_env=new Ort::Env(ORT_LOGGING_LEVEL_WARNING,"relcov"); Ort::SessionOptions so; so.SetIntraOpNumThreads(1);
               g_sess=new Ort::Session(*g_env, REL_ONNX_PATH.c_str(), so); g_ready=true;
@@ -3626,7 +3629,9 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
         double Z=baseline/disp; if(!(Z>1.0&&Z<120.0)) continue;
         Eigen::Vector3d P_i=Z*Eigen::Vector3d(fi.point.x(),fi.point.y(),1.0);
         bool ok=false; Eigen::Vector2d uh=predict(P_i,dx_r,dy_r,dth_r,ok); if(!ok) continue;
-        (void)fj;
+        // A+ only: drop features with non-finite optical flow (matches trainer dropna on vx_j/vy_j). Short-circuits
+        // when RC_APLUS is off -> fj.velocity not read, feature selection bit-identical to dd8d1e0.
+        if (RC_APLUS && !(std::isfinite(fj.velocity.x()) && std::isfinite(fj.velocity.y()))) continue;
         const double eps=1e-5; Eigen::Matrix<double,2,3> Jp; bool o2;
         Jp.col(0)=(predict(P_i,dx_r+eps,dy_r,dth_r,o2)-uh)/eps;
         Jp.col(1)=(predict(P_i,dx_r,dy_r+eps,dth_r,o2)-uh)/eps;
@@ -3647,10 +3652,16 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
         feats.push_back((float)std::hypot(fi.point.x(),fi.point.y()));
         feats.push_back((float)std::log1p((double)it.used_num));
         feats.push_back((float)fi.point.x()); feats.push_back((float)fi.point.y());
+        // A+ Route C (RC_APLUS): raw frame-j optical flow + wheel SE(2) motion. Order MUST match the trainer's
+        // INPUTS = geom10 + [vx_j,vy_j,w_dx,w_dy,w_dtheta]. fj.velocity = same source the logger wrote to vx_j/vy_j.
+        if (RC_APLUS){
+            feats.push_back((float)fj.velocity.x()); feats.push_back((float)fj.velocity.y());
+            feats.push_back((float)dx_r); feats.push_back((float)dy_r); feats.push_back((float)dth_r);
+        }
         fids.push_back(it.feature_id); Lam_hand.push_back(Lam);
     }
     if (fids.empty()) return;
-    const int D=10;
+    const int D = RC_APLUS ? 15 : 10;
     std::vector<std::array<float,3>> abc(fids.size(), std::array<float,3>{0,0,0});
     bool ran=false;
     if (use_net && g_ready){
@@ -3669,7 +3680,9 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
     static bool dumped=false;
     if (!dumped){ const char* dp=std::getenv("REL_COV_DUMP");
         if (dp){ dumped=true; std::ofstream o(dp); o<<std::setprecision(9);   // full float precision for clean parity
-            o<<"fid,L00,L11,L10,logZ,disp,inv_disp,radius,logtrack,nx,ny,a,b,c\n";
+            o<<"fid,L00,L11,L10,logZ,disp,inv_disp,radius,logtrack,nx,ny";
+            if (RC_APLUS) o<<",vx_j,vy_j,w_dx,w_dy,w_dtheta";
+            o<<",a,b,c\n";
             for(size_t k=0;k<fids.size();++k){ o<<fids[k]; for(int d=0;d<D;++d) o<<","<<feats[k*D+d];
                 o<<","<<abc[k][0]<<","<<abc[k][1]<<","<<abc[k][2]<<"\n"; }
             ROS_WARN("[reliability-cov] dumped %zu feats to %s", fids.size(), dp); } }
