@@ -70,8 +70,12 @@ bool ProjectionOneFrameTwoCamFactor::Evaluate(double const *const *parameters, d
     residual = (pts_camera_j / dep_j).head<2>() - pts_j_td.head<2>();
 #endif
 
-    residual = sqrt_info * residual;
-    residual *= feat_weight_;   // R3 per-feature reliability (sqrt of reliability); 1.0 = bit-identical
+    if (use_inst_sqrt_info_) {
+        residual = sqrt_info_inst_ * residual;   // M0: anisotropic per-feature whitening (W * r)
+    } else {
+        residual = sqrt_info * residual;
+        residual *= feat_weight_;   // R3 per-feature reliability (sqrt of reliability); 1.0 = bit-identical
+    }
 
     if (jacobians)
     {
@@ -93,8 +97,12 @@ bool ProjectionOneFrameTwoCamFactor::Evaluate(double const *const *parameters, d
         reduce << 1. / dep_j, 0, -pts_camera_j(0) / (dep_j * dep_j),
             0, 1. / dep_j, -pts_camera_j(1) / (dep_j * dep_j);
 #endif
-        reduce = sqrt_info * reduce;
-        reduce *= feat_weight_;   // R3: scale all jacobian blocks by per-feature weight
+        if (use_inst_sqrt_info_) {
+            reduce = sqrt_info_inst_ * reduce;   // M0: anisotropic per-feature whitening (W * reduce)
+        } else {
+            reduce = sqrt_info * reduce;
+            reduce *= feat_weight_;   // R3: scale all jacobian blocks by per-feature weight
+        }
 
         if (jacobians[0])
         {
@@ -126,8 +134,13 @@ bool ProjectionOneFrameTwoCamFactor::Evaluate(double const *const *parameters, d
         if (jacobians[3])
         {
             Eigen::Map<Eigen::Vector2d> jacobian_td(jacobians[3]);
-            jacobian_td = reduce * ric2.transpose() * ric * velocity_i / inv_dep_i * -1.0  +
-                          feat_weight_ * sqrt_info * velocity_j.head(2);   // R3: scale the un-reduced td term too
+            if (use_inst_sqrt_info_) {
+                jacobian_td = reduce * ric2.transpose() * ric * velocity_i / inv_dep_i * -1.0  +
+                              sqrt_info_inst_ * velocity_j.head(2);   // M0: anisotropic whitening of the un-reduced td term
+            } else {
+                jacobian_td = reduce * ric2.transpose() * ric * velocity_i / inv_dep_i * -1.0  +
+                              feat_weight_ * sqrt_info * velocity_j.head(2);   // R3: scale the un-reduced td term too
+            }
         }
     }
     sum_t += tic_toc.toc();

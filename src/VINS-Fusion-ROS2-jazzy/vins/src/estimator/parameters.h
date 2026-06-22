@@ -81,6 +81,13 @@ extern double REL_INJECT_FRAC;
 extern int RELIABILITY_WEIGHT_RESIDUAL;  // §2 ablation: 0=motion(wheel-ref d2, default), 1=residual(VIO own reproj)
 extern int REL_USE_LEARNED_MODEL;        // v11: 0=hand d2 (default), 1=learned ONNX ReliabilityNet
 extern std::string REL_ONNX_PATH;        // path to reliability_perfeat.onnx
+// P1-Reliability M0: per-feature anisotropic information matrix into BA. 0=scalar weight (default),
+// 1=anisotropic 2x2 from feat_rel_cur_ (populated in M1), 2=neutral plumbing test (each factor's own baseline).
+extern int REL_ANISO_INFO;
+extern double REL_ANISO_FLOOR_EV;        // min eigenvalue of the predicted information (SPD floor) at inference
+extern double REL_ANISO_MAX_EV;          // max eigenvalue of the predicted information (condition cap) at inference
+extern int REL_DEPTH_PRIOR;              // M2: 0=depth folded into 2x2 (default), 1=explicit inverse-depth prior
+extern std::string REL_COV_OUTPUT_NODE;  // M2: ONNX output node name for the covariance head
 // [pose-cov] integrity diagnostic switch (DEFAULT OFF; expensive DENSE_SVD covariance per keyframe).
 extern int POSE_COV_ENABLE;
 extern int POSE_COV_EVERY_N;

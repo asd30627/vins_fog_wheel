@@ -324,10 +324,18 @@ class Estimator
     // ===== P1-Reliability R3b: per-feature reliability weight =====
     std::map<int, double> track_rel_;     // persistent per-track reliability (temporal memory)
     std::map<int, double> feat_weight_cur_;  // feature_id -> sqrt(reliability) for the current optimization
+    // ===== P1-Reliability M0: per-feature anisotropic information (visual 2x2 sqrt-info + optional depth) =====
+    struct FeatRelInfo {
+        Eigen::Matrix2d sqrt_info = Eigen::Matrix2d::Zero(); // W (W^T W = Lambda): per-feature 2x2 whitener for the visual residual
+        double inv_depth_info = 0.0;                          // optional inverse-depth information (0 => no depth prior)
+        bool valid = false;
+    };
+    std::map<int, FeatRelInfo> feat_rel_cur_;  // feature_id -> anisotropic info for the current optimization (M0+; populated in M1)
     bool reliability_intr_ready_ = false;
     double rel_fx_ = 0, rel_fy_ = 0, rel_cx_ = 0, rel_cy_ = 0;
     void computeFeatureReliability();     // fills feat_weight_cur_ (call at top of optimization when enabled)
     void computeFeatureReliability_learned();  // v11: learned ONNX ReliabilityNet branch (REL_USE_LEARNED_MODEL)
+    void computeFeatureReliabilityAnisoLearned();  // M1: per-feature anisotropic cov (REL_ANISO_INFO=1) -> feat_rel_cur_
 
     // §2 controlled dynamic injection (leak-free; coherent synthetic moving block; ids >= INJ_ID_BASE)
     static const int INJ_ID_BASE = 900000;

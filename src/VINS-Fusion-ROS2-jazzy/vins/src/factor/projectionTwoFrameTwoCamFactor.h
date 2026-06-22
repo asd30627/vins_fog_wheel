@@ -33,5 +33,10 @@ class ProjectionTwoFrameTwoCamFactor : public ceres::SizedCostFunction<2, 7, 7, 
     Eigen::Matrix<double, 2, 3> tangent_base;
     static Eigen::Matrix2d sqrt_info;
     double feat_weight_ = 1.0;   // P1-Reliability R3: per-feature reliability weight (sqrt of reliability); 1.0 = bit-identical
+    // P1-Reliability M0: per-feature anisotropic sqrt(information). When use_inst_sqrt_info_ is true,
+    // sqrt_info_inst_ (full 2x2 left-multiplier W with W^T W = Lambda) REPLACES feat_weight_*sqrt_info.
+    // Default false => the legacy scalar path runs verbatim => bit-identical.
+    Eigen::Matrix2d sqrt_info_inst_ = Eigen::Matrix2d::Zero();
+    bool use_inst_sqrt_info_ = false;
     static double sum_t;
 };

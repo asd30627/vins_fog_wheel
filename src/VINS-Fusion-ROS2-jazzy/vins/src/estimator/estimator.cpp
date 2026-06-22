@@ -2292,6 +2292,24 @@ void Estimator::optimization()
     computeFeatureReliability();
     auto applyRel = [&](auto *fac, int fid) {
         if (!FEATURE_RELIABILITY_ENABLE) return;
+        if (REL_ANISO_INFO == 2) {
+            // M0 neutral plumbing test: feed each factor its OWN isotropic baseline sqrt_info.
+            // W == baseline => residual/jacobians unchanged => bit-identical to the scalar path at weight 1.
+            fac->sqrt_info_inst_ = fac->sqrt_info;
+            fac->use_inst_sqrt_info_ = true;
+            return;
+        }
+        if (REL_ANISO_INFO == 1) {
+            // M1 deploy: per-feature SHAPE-only whitener. feat_rel_cur_[fid].sqrt_info = U (det~1, spec §7);
+            // deploy U * baseline so the global visual scale is preserved (U=I => baseline => do-no-harm).
+            // Missing entry => legacy isotropic baseline (use_inst stays false).
+            auto it = feat_rel_cur_.find(fid);
+            if (it != feat_rel_cur_.end() && it->second.valid) {
+                fac->sqrt_info_inst_ = it->second.sqrt_info * fac->sqrt_info;
+                fac->use_inst_sqrt_info_ = true;
+            }
+            return;
+        }
         auto it = feat_weight_cur_.find(fid);
         if (it != feat_weight_cur_.end()) fac->feat_weight_ = it->second;
     };
@@ -3321,7 +3339,9 @@ void Estimator::setupPerFeatLogger()
         "f_valid,f_dpsi,f_var,f_t0,f_t1,"
         // extrinsics cam0/cam1 (body<-cam): tic + ric quat
         "tic0_x,tic0_y,tic0_z,ric0_x,ric0_y,ric0_z,ric0_w,"
-        "tic1_x,tic1_y,tic1_z,ric1_x,ric1_y,ric1_z,ric1_w";
+        "tic1_x,tic1_y,tic1_z,ric1_x,ric1_y,ric1_z,ric1_w,"
+        // M0 task7: FOG/gyro cross-modal (rotation-only) per-feature flow residual at frame j
+        "vg_res,vg_res_min,vg_cos,vg_ratio";
 
     try
     {
@@ -3426,6 +3446,32 @@ void Estimator::writePerFeatRows(double header)
              << fi.point.x() << "," << fi.point.y() << "," << fi.uv.x() << "," << fi.uv.y() << ","
              << nanIf(fi.is_stereo, fi.pointRight.x()) << "," << nanIf(fi.is_stereo, fi.pointRight.y());
         line << ctx_str;
+        // M0 task7: FOG/gyro cross-modal (rotation-only) — observed feature flow vs gyro-predicted rotational flow
+        // at frame j. Identical math to computePendingVisionGyroConsistencyStats; logged per-feature for offline
+        // learning (the moat input). Logging-only; never feeds the optimization.
+        double vg_res = std::numeric_limits<double>::quiet_NaN();
+        double vg_res_min = vg_res, vg_cos = vg_res, vg_ratio = vg_res;
+        {
+            const double x = fj.point.x(), y = fj.point.y();
+            const double vx = fj.velocity.x(), vy = fj.velocity.y();
+            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(vx) && std::isfinite(vy))
+            {
+                const Eigen::Vector3d w_cam_pf = ric[0].transpose() *
+                    Eigen::Vector3d(pending_gyr_bgcorr_x_mean, pending_gyr_bgcorr_y_mean, pending_gyr_bgcorr_z_mean);
+                const double wx = w_cam_pf.x(), wy = w_cam_pf.y(), wz = w_cam_pf.z();
+                const double pvx = x*y*wx - (1.0 + x*x)*wy + y*wz;
+                const double pvy = (1.0 + y*y)*wx - x*y*wy - x*wz;
+                vg_res = std::hypot(vx - pvx, vy - pvy);
+                const double vg_res_flip = std::hypot(vx + pvx, vy + pvy);
+                vg_res_min = std::min(vg_res, vg_res_flip);
+                const double on = std::hypot(vx, vy), pn = std::hypot(pvx, pvy);
+                if (on > 1e-9 && pn > 1e-9) {
+                    vg_cos = std::max(-1.0, std::min(1.0, (vx*pvx + vy*pvy) / (on*pn)));
+                    vg_ratio = on / std::max(pn, 1e-9);
+                }
+            }
+        }
+        line << "," << vg_res << "," << vg_res_min << "," << vg_cos << "," << vg_ratio;
         perfeat_logger.append(line.str());
     }
     perfeat_logger.flush();
@@ -3520,14 +3566,140 @@ void Estimator::computeFeatureReliability_learned()
         ROS_INFO("[reliability-learned] feats=%zu w_range=[%.3f,%.3f] (ONNX)", feat_weight_cur_.size(), wmin, wmax);
 }
 
+// ============================================================================
+// M1 deploy: per-feature ANISOTROPIC covariance. Inputs computed from the hand-S, MATCHED to the Python trainer
+// (build_perfeat_window_dataset.py): block-diagonal wheel Sig_m (drops dtheta cross-cov c02/c12, exactly as the
+// trainer), J=diag(fx,fy), Lambda_norm = J^T S^-1 J. ONNX cov model -> raw log-Cholesky (a,b,c) -> Lambda_norm ->
+// SHAPE-ONLY whitener U (det~1; global scale preserved). feat_rel_cur_[fid].sqrt_info = U; applyRel deploys
+// sqrt_info_inst_ = U * baseline. See M1_covariance_parity_spec.md §7-8. Any failure -> leave feat_rel_cur_ empty
+// (factors fall back to baseline => do-no-harm).
+// ============================================================================
+void Estimator::computeFeatureReliabilityAnisoLearned()
+{
+    static Ort::Env* g_env=nullptr; static Ort::Session* g_sess=nullptr; static bool g_ready=false, g_tried=false;
+    const bool use_net = REL_USE_LEARNED_MODEL && !REL_ONNX_PATH.empty();
+    if (use_net && !g_tried) { g_tried=true;
+        try { g_env=new Ort::Env(ORT_LOGGING_LEVEL_WARNING,"relcov"); Ort::SessionOptions so; so.SetIntraOpNumThreads(1);
+              g_sess=new Ort::Session(*g_env, REL_ONNX_PATH.c_str(), so); g_ready=true;
+              ROS_WARN("[reliability-cov] ONNX ready: %s", REL_ONNX_PATH.c_str()); }
+        catch (const std::exception& e){ ROS_ERROR("[reliability-cov] ONNX load FAILED (%s) -> baseline (U=I)", e.what()); } }
+    const int j=frame_count, i=frame_count-1; if (i<0) return;
+    if (!reliability_intr_ready_) {
+        double Sx=0,Sxx=0,Su=0,Sxu=0,Sy=0,Syy=0,Sv=0,Syv=0; long N=0;
+        for (auto &it: f_manager.feature) for (auto &f: it.feature_per_frame){
+            double nx=f.point.x(),ny=f.point.y(),u=f.uv.x(),v=f.uv.y();
+            Sx+=nx;Sxx+=nx*nx;Su+=u;Sxu+=nx*u;Sy+=ny;Syy+=ny*ny;Sv+=v;Syv+=ny*v;N++; }
+        if (N>50){ double dx=N*Sxx-Sx*Sx,dy=N*Syy-Sy*Sy;
+            if (std::abs(dx)>1e-9&&std::abs(dy)>1e-9){ rel_fx_=(N*Sxu-Sx*Su)/dx;rel_cx_=(Su-rel_fx_*Sx)/N;
+                rel_fy_=(N*Syv-Sy*Sv)/dy;rel_cy_=(Sv-rel_fy_*Sy)/N; reliability_intr_ready_=(rel_fx_>1.0&&rel_fy_>1.0);} }
+        if (!reliability_intr_ready_) return; }
+    WheelPreintegration *wp=wheel_pre_integrations[j]; if (wp==nullptr||!wp->valid) return;
+    const double fx=rel_fx_,fy=rel_fy_,cx=rel_cx_,cy=rel_cy_;
+    const double sigma_uv=RELIABILITY_SIGMA_UV, sig2=sigma_uv*sigma_uv;
+    double baseline=(tic[0]-tic[1]).norm();
+    Eigen::Matrix3d R_bc=ric[0]; Eigen::Vector3d t_bc=tic[0];
+    Eigen::Matrix3d R_cb=R_bc.transpose(); Eigen::Vector3d t_cb=-R_cb*t_bc;
+    double dx_r=wp->dx,dy_r=wp->dy,dth_r=wp->dtheta;
+    // block-diagonal wheel cov to MATCH the trainer (drops dtheta cross-cov c02/c12)
+    Eigen::Matrix3d Sig_m=Eigen::Matrix3d::Zero();
+    Sig_m(0,0)=wp->cov(0,0); Sig_m(0,1)=wp->cov(0,1); Sig_m(1,0)=wp->cov(1,0); Sig_m(1,1)=wp->cov(1,1);
+    Sig_m(2,2)=std::max(wp->cov(2,2),1e-10);
+    auto predict=[&](const Eigen::Vector3d&P_i,double pdx,double pdy,double pdth,bool&ok)->Eigen::Vector2d{
+        double c=std::cos(pdth),s=std::sin(pdth); Eigen::Matrix3d Rb; Rb<<c,-s,0,s,c,0,0,0,1;
+        Eigen::Vector3d Pb_i=R_bc*P_i+t_bc; Eigen::Vector3d Pb_j=Rb*Pb_i+Eigen::Vector3d(pdx,pdy,0.0);
+        Eigen::Vector3d Pc_j=R_cb*Pb_j+t_cb; if(Pc_j.z()<=1e-6){ok=false;return Eigen::Vector2d::Zero();}
+        ok=true; return Eigen::Vector2d(fx*Pc_j.x()/Pc_j.z()+cx,fy*Pc_j.y()/Pc_j.z()+cy); };
+    std::vector<float> feats; std::vector<int> fids; std::vector<Eigen::Matrix2d> Lam_hand;
+    feats.reserve(2560);
+    for (auto &it: f_manager.feature){
+        const int sf=it.start_frame, idx_i=i-sf, idx_j=j-sf; const int n=(int)it.feature_per_frame.size();
+        if (idx_i<0||idx_j<0||idx_j>=n) continue;
+        const FeaturePerFrame &fi=it.feature_per_frame[idx_i], &fj=it.feature_per_frame[idx_j];
+        if (!fi.is_stereo) continue;
+        double disp=fi.point.x()-fi.pointRight.x(); if(!std::isfinite(disp)||std::abs(disp)<1e-4) continue;
+        double Z=baseline/disp; if(!(Z>1.0&&Z<120.0)) continue;
+        Eigen::Vector3d P_i=Z*Eigen::Vector3d(fi.point.x(),fi.point.y(),1.0);
+        bool ok=false; Eigen::Vector2d uh=predict(P_i,dx_r,dy_r,dth_r,ok); if(!ok) continue;
+        (void)fj;
+        const double eps=1e-5; Eigen::Matrix<double,2,3> Jp; bool o2;
+        Jp.col(0)=(predict(P_i,dx_r+eps,dy_r,dth_r,o2)-uh)/eps;
+        Jp.col(1)=(predict(P_i,dx_r,dy_r+eps,dth_r,o2)-uh)/eps;
+        Jp.col(2)=(predict(P_i,dx_r,dy_r,dth_r+eps,o2)-uh)/eps;
+        Eigen::Matrix2d motion=Jp*Sig_m*Jp.transpose();
+        double sig_disp=std::sqrt(2.0)*sigma_uv/fx; double sig_Z=(Z*Z/std::max(baseline,1e-6))*sig_disp;
+        double dZ=std::max(1e-4,1e-3*Z); bool o3;
+        Eigen::Vector2d uh2=predict((Z+dZ)*Eigen::Vector3d(fi.point.x(),fi.point.y(),1.0),dx_r,dy_r,dth_r,o3);
+        Eigen::Vector2d Jd=(uh2-uh)/dZ; Eigen::Matrix2d depth=Jd*Jd.transpose()*(sig_Z*sig_Z);
+        Eigen::Matrix2d S=motion+depth+sig2*Eigen::Matrix2d::Identity();
+        Eigen::Matrix2d Sinv=S.inverse(); if(!Sinv.allFinite()) continue;
+        Eigen::Matrix2d Jintr; Jintr<<fx,0,0,fy;
+        Eigen::Matrix2d Lam=Jintr*Sinv*Jintr;   // normalized-space info = J^T S^-1 J (J diagonal symmetric)
+        Eigen::LLT<Eigen::Matrix2d> llt(Lam); if(llt.info()!=Eigen::Success) continue;
+        Eigen::Matrix2d L=llt.matrixL();
+        feats.push_back((float)L(0,0)); feats.push_back((float)L(1,1)); feats.push_back((float)L(1,0));
+        feats.push_back((float)std::log(Z)); feats.push_back((float)disp); feats.push_back((float)(1.0/disp));
+        feats.push_back((float)std::hypot(fi.point.x(),fi.point.y()));
+        feats.push_back((float)std::log1p((double)it.used_num));
+        feats.push_back((float)fi.point.x()); feats.push_back((float)fi.point.y());
+        fids.push_back(it.feature_id); Lam_hand.push_back(Lam);
+    }
+    if (fids.empty()) return;
+    const int D=10;
+    std::vector<std::array<float,3>> abc(fids.size(), std::array<float,3>{0,0,0});
+    bool ran=false;
+    if (use_net && g_ready){
+        try {
+            Ort::MemoryInfo mi=Ort::MemoryInfo::CreateCpu(OrtArenaAllocator,OrtMemTypeDefault);
+            std::array<int64_t,2> shape{(int64_t)fids.size(),D};
+            Ort::Value in=Ort::Value::CreateTensor<float>(mi,feats.data(),feats.size(),shape.data(),2);
+            const char* innames[]={"feat"}; const char* outnames[]={"cov"};
+            auto out=g_sess->Run(Ort::RunOptions{nullptr},innames,&in,1,outnames,1);
+            float* od=out[0].GetTensorMutableData<float>();
+            for(size_t k=0;k<fids.size();++k){abc[k]={od[3*k],od[3*k+1],od[3*k+2]};}
+            ran=true;
+        } catch(const std::exception&e){ ROS_ERROR("[reliability-cov] inference failed: %s",e.what()); }
+    }
+    // one-shot parity dump (env REL_COV_DUMP): first window's raw inputs + onnx (a,b,c) -> compared vs Python
+    static bool dumped=false;
+    if (!dumped){ const char* dp=std::getenv("REL_COV_DUMP");
+        if (dp){ dumped=true; std::ofstream o(dp); o<<std::setprecision(9);   // full float precision for clean parity
+            o<<"fid,L00,L11,L10,logZ,disp,inv_disp,radius,logtrack,nx,ny,a,b,c\n";
+            for(size_t k=0;k<fids.size();++k){ o<<fids[k]; for(int d=0;d<D;++d) o<<","<<feats[k*D+d];
+                o<<","<<abc[k][0]<<","<<abc[k][1]<<","<<abc[k][2]<<"\n"; }
+            ROS_WARN("[reliability-cov] dumped %zu feats to %s", fids.size(), dp); } }
+    // reconstruct Lambda_norm -> SHAPE-ONLY U -> feat_rel_cur_
+    auto softplus=[](double x){ return x>20.0?x:std::log1p(std::exp(x)); };
+    int n_aniso=0; double rsum=0;
+    for (size_t k=0;k<fids.size();++k){
+        Eigen::Matrix2d Lam;
+        if (ran){ double l11=softplus(abc[k][0])+1e-3, l22=softplus(abc[k][1])+1e-3, l21=abc[k][2];
+                  Eigen::Matrix2d L; L<<l11,0.0, l21,l22; Lam=L*L.transpose(); }
+        else Lam=Lam_hand[k];
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> es(Lam); if(es.info()!=Eigen::Success) continue;
+        double l1=es.eigenvalues()(0), l2=es.eigenvalues()(1); if(!(l1>0&&l2>0)) continue;
+        const double maxr=100.0; if(l2>l1*maxr) l2=l1*maxr;
+        double lbar=std::sqrt(l1*l2);
+        Eigen::Vector2d u(std::sqrt(l1/lbar), std::sqrt(l2/lbar));
+        Eigen::Matrix2d V=es.eigenvectors();
+        Eigen::Matrix2d U=V*u.asDiagonal()*V.transpose();   // symmetric SPD, det~1 (shape only)
+        FeatRelInfo fr; fr.sqrt_info=U; fr.valid=true; feat_rel_cur_[fids[k]]=fr;
+        rsum+=l2/l1; if(l2/l1>1.1) n_aniso++;
+    }
+    if (!feat_rel_cur_.empty())
+        ROS_INFO("[reliability-cov] feats=%zu aniso(>1.1)=%d mean_ratio=%.2f net=%d",
+                 feat_rel_cur_.size(), n_aniso, rsum/std::max((size_t)1,fids.size()), (int)ran);
+}
+
 void Estimator::computeFeatureReliability()
 {
     feat_weight_cur_.clear();
+    feat_rel_cur_.clear();   // M0: per-feature anisotropic info; repopulated each optimization() when REL_ANISO_INFO==1 (M1)
     if (!FEATURE_RELIABILITY_ENABLE)
         return;
     const int j = frame_count, i = frame_count - 1;
     if (i < 0)
         return;
+    if (REL_ANISO_INFO == 1) { computeFeatureReliabilityAnisoLearned(); return; }   // M1: per-feature anisotropic cov
     if (REL_USE_LEARNED_MODEL) { computeFeatureReliability_learned(); return; }
 
     // ---- recover pinhole intrinsics once (u = fx*nx + cx) from real observations ----

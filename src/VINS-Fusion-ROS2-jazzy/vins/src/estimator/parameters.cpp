@@ -74,6 +74,12 @@ double REL_INJECT_FRAC = 0.2;        // synthetic features as a fraction of the 
 int RELIABILITY_WEIGHT_RESIDUAL = 0; // §2 ablation: weight signal source (0=motion/wheel-ref d2, 1=VIO own residual)
 int REL_USE_LEARNED_MODEL = 0;       // v11: learned ONNX ReliabilityNet (default OFF -> hand d2)
 std::string REL_ONNX_PATH = "";
+// P1-Reliability M0: per-feature anisotropic information (default OFF / neutral content).
+int REL_ANISO_INFO = 0;
+double REL_ANISO_FLOOR_EV = 1e-6;
+double REL_ANISO_MAX_EV = 1e12;
+int REL_DEPTH_PRIOR = 0;
+std::string REL_COV_OUTPUT_NODE = "cov";
 int POSE_COV_ENABLE = 0;   // DEFAULT OFF — expensive [pose-cov] DENSE_SVD diagnostic (Paper-2 Sigma_A only)
 int POSE_COV_EVERY_N = 1;
 // P1 (fwvio) factor switches — DEFAULT OFF. flags-off => baseline behaviour unchanged (bit-invariance guardrail).
@@ -260,6 +266,14 @@ void readParameters(std::string config_file)
     if (const char* e = std::getenv("REL_USE_LEARNED_MODEL")) { std::string v(e); REL_USE_LEARNED_MODEL = (v=="1"||v=="true"||v=="on") ? 1 : 0; }
     if (const char* e = std::getenv("REL_ONNX_PATH")) REL_ONNX_PATH = std::string(e);
     ROS_WARN("REL_USE_LEARNED_MODEL: %d onnx=%s", REL_USE_LEARNED_MODEL, REL_ONNX_PATH.c_str());
+    REL_ANISO_INFO = 0;
+    if (const char* e = std::getenv("REL_ANISO_INFO")) REL_ANISO_INFO = atoi(e);
+    if (const char* e = std::getenv("REL_ANISO_FLOOR_EV")) REL_ANISO_FLOOR_EV = atof(e);
+    if (const char* e = std::getenv("REL_ANISO_MAX_EV")) REL_ANISO_MAX_EV = atof(e);
+    if (const char* e = std::getenv("REL_DEPTH_PRIOR")) { std::string v(e); REL_DEPTH_PRIOR = (v=="1"||v=="true"||v=="on") ? 1 : 0; }
+    if (const char* e = std::getenv("REL_COV_OUTPUT_NODE")) REL_COV_OUTPUT_NODE = std::string(e);
+    ROS_WARN("REL_ANISO_INFO: %d floor_ev=%.2e max_ev=%.2e depth_prior=%d cov_node=%s",
+             REL_ANISO_INFO, REL_ANISO_FLOOR_EV, REL_ANISO_MAX_EV, REL_DEPTH_PRIOR, REL_COV_OUTPUT_NODE.c_str());
 
     // ===== [pose-cov] integrity diagnostic switch — DEFAULT OFF =====
     // The DENSE_SVD per-keyframe covariance is expensive and throttles VINS below real-time at
