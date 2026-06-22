@@ -1,29 +1,35 @@
 ## ADDED Requirements
 
-### Requirement: Motion input is the full ego residual flow, FOG-independent
-The covariance network SHALL receive a per-feature motion input defined as the **full ego residual flow** = observed optical flow (`FeaturePerFrame.velocity`, normalized image coordinates) MINUS the ego-predicted flow computed from the wheel SE(2) preintegration (`wp->dx, wp->dy, wp->dtheta`) and stereo depth via the existing `predict()` projection. The motion input MUST NOT incorporate vg/fog cross-modal signals. The initial input SHALL be the residual-flow 2D vector ONLY; raw `velocity` SHALL be deferred to a later ablation and SHALL NOT be part of the initial input.
+### Requirement: Motion input is raw optical flow + wheel-motion parts (A+), FOG-independent
+The covariance network SHALL receive, per feature, the **raw observed optical flow** (`vx_j, vy_j` = `FeaturePerFrame.velocity`, normalized coords) AND the **wheel SE(2) motion parts** (`w_dx, w_dy, w_dtheta`), IN ADDITION to the existing depth (`logZ, disp, inv_disp`) and image-position (`nx, ny`) inputs. The net SHALL **learn the ego-flow subtraction internally** — reconstruct `ego_flow = f(wheel motion, per-feature depth, position)` and subtract it to obtain an effective residual flow — rather than being fed a precomputed residual. The motion input MUST NOT incorporate vg/fog cross-modal signals. The input vector grows 10→15 (the +5: `vx_j, vy_j, w_dx, w_dy, w_dtheta`).
 
-#### Scenario: Residual flow is computed from observed minus ego-predicted flow
-- **WHEN** the per-feature motion input is assembled (in training-data generation and at deploy)
-- **THEN** it equals `velocity − predict(wheel_motion, stereo_depth)` as a 2D vector in normalized image coordinates
-- **AND** no term in the motion input is derived from the FOG/gyro cross-modal (vg/fog) signals
+This A+ design is chosen over feeding `velocity − predict()` because that precomputed residual equals the NLL target ÷ dt (circular → IRLS degeneration). All A+ motion inputs are **cov-independent observables**, so they are identical at train (cov off) and deploy (cov on) — no train/deploy skew, no self-reference.
 
-#### Scenario: FOG and cov signal sources do not overlap
+#### Scenario: Net learns ego subtraction from cov-independent parts (non-circular)
+- **WHEN** the per-feature inputs are assembled (training-data generation and deploy)
+- **THEN** they include raw `vx_j,vy_j` + `w_dx,w_dy,w_dtheta` + existing depth/position, and the net learns to subtract ego flow
+- **AND** they do NOT include `velocity − predict()` (= NLL target ÷ dt), so the input is non-circular
+
+#### Scenario: Inputs are cov-independent (no train/deploy skew)
+- **WHEN** the same feature is processed at train (cov off) and at deploy (cov on)
+- **THEN** every motion-related input (velocity, wheel motion, depth, position) is a cov-independent observable with the identical value in both — no skew, no self-reference
+
+#### Scenario: FOG-independent, with a stated limitation
 - **WHEN** the design is reviewed for narrative separation
-- **THEN** FOG provides rotation precision inside IMU preintegration only
-- **AND** the cov motion signal is sourced solely from visual-flow-versus-ego-motion inconsistency
+- **THEN** FOG provides rotation precision inside IMU preintegration only, and the cov motion signal comes solely from visual flow + wheel motion (no vg/fog)
+- **AND** the known limitation is recorded: the wheel gives yaw only, so pitch/roll ego rotation is unmodeled (accepted — small on KAIST flat roads; full angular rate would require FOG, which would violate Framework 2)
 
 ### Requirement: Motion input is deployable with no new sensors
-The system SHALL compute the motion input at deploy time inside `computeFeatureReliabilityAnisoLearned()` using only quantities already in scope: `FeaturePerFrame.velocity`, the wheel SE(2) preintegration, the existing `predict()` lambda, and stereo depth `Z = baseline / disp`. No new sensor or external input SHALL be required.
+The system SHALL assemble the A+ inputs at deploy time inside `computeFeatureReliabilityAnisoLearned()` using only quantities already in scope: `FeaturePerFrame.velocity` (`vx_j,vy_j`), the wheel SE(2) preintegration (`wp->dx, wp->dy, wp->dtheta`), and stereo depth `Z = baseline / disp` (already used for `logZ,disp,inv_disp,nx,ny`). No new sensor or external input SHALL be required, and no precomputed residual SHALL be fed (the net learns the subtraction).
 
-#### Scenario: Deploy computes residual flow from in-scope quantities
+#### Scenario: Deploy assembles A+ inputs from in-scope observables
 - **WHEN** the estimator runs the per-feature covariance inference per optimization
-- **THEN** the motion input is produced from `FeaturePerFrame.velocity` and the wheel+stereo `predict()` flow already available in the function scope
-- **AND** the deploy residual uses the real wheel/gyro ego motion (not a static-feature fit)
+- **THEN** the 5 new inputs (`vx_j,vy_j,w_dx,w_dy,w_dtheta`) are read directly from `FeaturePerFrame.velocity` and the wheel preintegration already in scope
+- **AND** no `velocity − predict()` residual is computed (avoids the target-circularity)
 
-#### Scenario: Train/deploy parity on the motion input
+#### Scenario: Train/deploy parity on the motion inputs
 - **WHEN** the golden-vector parity test runs (PyTorch reference vs C++ onnxruntime)
-- **THEN** the extended input vector (including the motion dim(s)) matches within 1e-5
+- **THEN** the extended 15-dim input vector (including the 5 motion dims) matches within 1e-5
 
 ### Requirement: NLL training target is unchanged
 Route C SHALL reuse the existing wheel-reference reprojection residual target (`ex_norm`, `ey_norm`) produced by `build_perfeat_window_dataset.py`. No new dynamic/static or object-direction label SHALL be introduced. Adding the motion input is a conditioning change, not a supervision change.
@@ -34,7 +40,7 @@ Route C SHALL reuse the existing wheel-reference reprojection residual target (`
 - **AND** no new label column or supervision signal is added
 
 ### Requirement: Input vector extension preserves baseline bit-invariance
-The network input vector SHALL grow from 10 to 12 dimensions (the residual-flow 2D vector) at both train and deploy. The deploy path SHALL remain environment-gated and default-OFF, such that with the flag OFF the estimator output is bit-identical to the pre-change baseline. The `cov_norm.npz` normalization SHALL absorb the new dimensions.
+The network input vector SHALL grow from 10 to 15 dimensions (the +5: `vx_j,vy_j,w_dx,w_dy,w_dtheta`) at both train and deploy. The deploy path SHALL remain environment-gated and default-OFF, such that with the flag OFF the estimator output is bit-identical to the pre-change baseline. The `cov_norm.npz` normalization SHALL absorb the new dimensions.
 
 #### Scenario: Flag-OFF baseline is bit-invariant
 - **WHEN** the motion-input deploy flag is OFF
@@ -42,7 +48,7 @@ The network input vector SHALL grow from 10 to 12 dimensions (the residual-flow 
 
 #### Scenario: Normalization handles new dimensions
 - **WHEN** the ONNX model is exported with the extended input
-- **THEN** `cov_norm.npz` (mu, sd) covers all 12 dimensions without manual edits
+- **THEN** `cov_norm.npz` (mu, sd) covers all 15 dimensions without manual edits
 
 ### Requirement: KAIST perfeat training data carries a per-feature velocity column (PRE-TASK 1, required)
 Before training Route C, the KAIST perfeat training data SHALL be regenerated so each per-feature row includes the `velocity` (and residual-flow) column(s). This pre-task is REQUIRED and SHALL be completed first. The hand-prior inputs (`lp11/lp22/lp21`) SHALL continue to be built from the populated wheel covariance `w_*` columns; the `sigma_uv=0` failure mode SHALL NOT recur.
@@ -123,3 +129,8 @@ Route C SHALL be evaluated leave-one-sequence-out (LOSO): the ATE reported for a
 - **WHEN** an all-data (deployment) model exists
 - **THEN** it is labeled deployment-only
 - **AND** it is never used for any win or do-no-harm number
+
+#### Scenario: Mid-dynamic trend datapoint (F-39)
+- **WHEN** Route C is evaluated on urban39-pankyo (the single mid-dynamic sequence) via its own held-out LOSO fold
+- **THEN** its ATE is reported as an independent dynamic-level **trend datapoint**, NOT a win or do-no-harm claim
+- **AND** it serves as evidence for whether the Route-C gain varies monotonically with dynamic level (heavy 35/31/36 → mid 39 → light 28/29/26/27)

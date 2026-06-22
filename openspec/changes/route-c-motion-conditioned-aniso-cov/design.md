@@ -27,19 +27,26 @@ This change sits inside **Framework 2** of the FOG-aided VINS learned-covariance
 
 ## Decisions
 
-### Decision 1 — Motion input = full ego residual flow (`velocity − predict()`), a 2D vector
-**Chosen** because the diagnostic isolated this exact quantity as the clean, directional, stable signal (10.3° cross-frame). It is deployable with no new sensors: observed flow is `FeaturePerFrame.velocity` (`feature_manager.h:65`, normalized coords, per-frame, from KLT `ptsVelocity` `feature_tracker.cpp:597-635`); ego-predicted flow comes from the wheel SE(2) `wp->dx/dy/dtheta` + the `predict()` lambda already in scope (`estimator.cpp:3602-3611`) + stereo depth `Z=baseline/disp` (`estimator.cpp:3619-3621`). At deploy the residual uses the **real wheel+gyro ego motion**, so it is cleaner than the diagnostic (which used a static-feature ego fit removing only 57%).
-**Alternatives considered:** (a) raw `velocity` only — rejected as primary because it mixes ego + object motion; **deferred to a later ablation** (initial scope is the residual-flow 2D vector only, not raw velocity). (b) gyro-only residual (vg) — rejected as the motion input: rotation-only (does not subtract wheel translation) and FOG-derived (see Decision 2).
+### Decision 1 — Motion input = A+: raw optical flow + wheel-motion parts; net learns ego subtraction
+**Chosen.** The motion inputs are `vx_j,vy_j` (raw optical flow) + `w_dx,w_dy,w_dtheta` (wheel SE(2) motion), on top of the existing depth (`logZ,disp,inv_disp`) and position (`nx,ny`). The net reconstructs `ego_flow = f(wheel motion, per-feature depth, position)` and subtracts it internally; it is NOT fed a precomputed residual. Input grows **10 → 15** (+5). All inputs are deployable with no new sensors (`FeaturePerFrame.velocity` `feature_manager.h:65`; `wp->dx/dy/dtheta`; depth/position already in the 10-dim set).
+**Why not feed `velocity − predict()` (the earlier wording):** that precomputed residual = `velocity − wheel-reproject(i→j)` = NLL target ÷ dt → **circular** (degenerates to IRLS; memory: "inputs deliberately EXCLUDE the residual"). A+ avoids this — wheel motion parts are ego *quantities*, not the residual.
+**Why A+ over bare raw velocity:** bare raw velocity forces the net to infer ego from scratch; A+ hands it the wheel-motion parts so the task becomes "assemble ego_flow from parts, then subtract" — a learnable closed-form function. Diagnostic showed raw flow alone already has 4.2× magnitude separation; the parts make the *directional* subtraction learnable.
+**Key structural advantage:** every A+ input (velocity/wheel/depth/position) is a **cov-independent observable** → identical at train (cov off) and deploy (cov on) → **no train/deploy skew, no self-reference**.
+**Known limitation (accepted):** wheel gives yaw only → pitch/roll ego rotation unmodeled. Small on KAIST flat roads; full angular rate would need FOG (violates Framework 2). This is the necessary cost of "don't touch FOG".
+**Alternatives:** (a) bare raw velocity — superseded by A+ (kept conceptually as the floor). (b) `velocity − predict()` — rejected (circular). (c) gyro/vg residual — rejected (FOG-derived, Decision 2). (d) VINS-pose ego flow (full 6-DOF) — deferred to ablation (Risks: self-reference + skew).
 
 ### Decision 2 — Do NOT use vg/fog as the motion input (narrative separation)
-FOG's role is **rotation precision** inside IMU preintegration — the moat. cov's motion signal must come from an **independent** source: visual optical flow vs ego-motion inconsistency. If the motion input mixed vg/fog, cov would be partly a re-packaging of FOG, inviting the reviewer question "is cov just FOG twice?". Full ego residual flow keeps the two weapons cleanly separated and non-overlapping: **FOG = rotation precision; cov = visual-vs-ego inconsistency to catch dynamic objects.** This is a deliberate, locked decision, not an empirical one.
+FOG's role is **rotation precision** inside IMU preintegration — the moat. cov's motion signal must come from an **independent** source: visual optical flow vs ego-motion inconsistency. If the motion input mixed vg/fog, cov would be partly a re-packaging of FOG, inviting the reviewer question "is cov just FOG twice?". A+ (raw optical flow + wheel motion parts, no fog/gyro) keeps the two weapons cleanly separated and non-overlapping: **FOG = rotation precision; cov = visual-flow-vs-wheel-ego inconsistency to catch dynamic objects.** This is a deliberate, locked decision, not an empirical one.
 
 ### Decision 3 — NLL training target unchanged (wheel-reference reprojection residual)
 The supervision stays `ex_norm, ey_norm` (the independent wheel-SE(2)-reference residual already produced by `build_perfeat_window_dataset.py`). Dynamic features have large, directional residuals, so the **existing** NLL-against-residual objective already teaches anisotropy **once the net has a motion input to condition on**. No new label is designed. Adding a motion input is therefore a *conditioning* change, not a supervision change.
 **Alternative considered:** a new dynamic/static or object-direction label — rejected as unnecessary and as a source of leakage/circularity.
 
-### Decision 4 — Add the input dim via the existing `--vg` mechanism; keep deploy env-gated
-`train_cov_nll.py`/`export_cov_onnx.py` already extend `INPUTS` for `--vg/--fog`; the motion input follows the same pattern, and `cov_norm.npz` (mu/sd) auto-handles new dims. The C++ deploy appends the residual-flow 2D motion input to the `feats` vector (**10 → 12**), gated by env / default-OFF so the baseline stays **bit-invariant**; golden-vector parity (`M1_covariance_parity_spec.md`) is extended by **2 dims**.
+### Decision 4 — Add the input dims via the existing `--vg` mechanism; keep deploy env-gated
+`train_cov_nll.py`/`export_cov_onnx.py` already extend `INPUTS` for `--vg/--fog`; the 5 A+ inputs follow the same pattern, and `cov_norm.npz` (mu/sd) auto-handles new dims. The C++ deploy appends the 5 A+ inputs (`vx_j,vy_j,w_dx,w_dy,w_dtheta`) to the `feats` vector (**10 → 15**), gated by env / default-OFF so the baseline stays **bit-invariant**; golden-vector parity (`M1_covariance_parity_spec.md`) is extended by **5 dims**. (The perfeat CSV already carries `w_dx,w_dy,w_dtheta`; PRE-TASK 1 only had to add `vx_j,vy_j` — done.)
+
+### Decision 4b — VINS-pose ego flow is a DEFERRED ablation, not the main line
+Using the VINS-solved camera pose increment to compute a full 6-DOF ego flow (then subtracting from raw flow) would capture pitch/roll that A+ misses, and is **not** target-circular (the NLL target uses the wheel reference, which is not in the factor graph; the VINS pose is a visual+IMU solve — different source). It is rejected as the main line for two reasons that match the project's known traps: **(1) self-reference / chicken-and-egg** — cov changes the factor weights → changes the VINS pose → which feeds back as the cov input (an IRLS-like loop, weak under the current shape-only deploy but present); **(2) train/deploy skew** — training perfeat uses a cov-off reference pose, deploy uses a cov-influenced pose, so the ego-flow source differs. If A+ passes the win gate but we want to approach the diagnostic's full-6-DOF ceiling, try this as an ablation and measure stability empirically first.
 
 ### Decision 5 — Task priority: measure FOG-base variance first, then KAIST perfeat, then (deferred) CARLA mechanism data
 - **PRE-TASK 0 (required, runs FIRST):** before any Route C training, run FOG-base on the corruption trio (urban35-seoul / urban31-gangnam / urban36-seoul), **5 isolated reps**, and measure the median-ATE run-to-run variance (distribution / std). This **fixes the concrete corruption-win % threshold** (the one space currently left open). It depends on nothing in Route C, and the FOG-base variance is itself a required paper number — so it is the cheapest, earliest thing to run.
@@ -53,13 +60,29 @@ The supervision stays `ex_norm, ey_norm` (the independent wheel-SE(2)-reference 
 - **CARLA is a relay, not the KAIST alternative:** CARLA-as-test (cross-dataset, naturally zero-leakage) was considered. It is NOT a substitute for LOSO — it is PRE-TASK 2 mechanism validation (does the net orient anisotropy to object motion), gated AFTER the KAIST win. LOSO settles the KAIST ATE-leakage; CARLA adds cross-dataset mechanism evidence. Both run, in relay.
 **Alternatives considered:** (a) held-out trio — rejected (self-sabotages dynamic signal). (b) CARLA-as-win-test instead of KAIST — rejected as a *replacement* (kept as the PRE-TASK 2 relay).
 
+**Approved LOSO fold table (8 folds + deployment model), clean-only, fog-mode:**
+
+| Fold | held-out test | training set (other 7) | role |
+|---|---|---|---|
+| F-35 | urban35-seoul | 26,27,28,29,31,36,39 | **win** |
+| F-31 | urban31-gangnam | 26,27,28,29,35,36,39 | **win** |
+| F-36 | urban36-seoul | 26,27,28,29,31,35,39 | **win** |
+| F-28 | urban28-pankyo | 26,27,29,31,35,36,39 | do-no-harm |
+| F-29 | urban29-pankyo | 26,27,28,31,35,36,39 | do-no-harm |
+| F-26 | urban26-dongtan | 27,28,29,31,35,36,39 | do-no-harm |
+| F-27 | urban27-dongtan | 26,28,29,31,35,36,39 | do-no-harm |
+| **F-39** | urban39-pankyo | 26,27,28,29,31,35,36 | **mid-dynamic trend datapoint** |
+| deploy | — | all 8 | deployment-only (never a gate claim) |
+
+**F-39 role (decided):** urban39 is the single *mid-dynamic* sequence (heavy 35/31/36; light 28/29/26/27; 39 in between). The win/do-no-harm gates only probe the two extremes; F-39 adds an independent datapoint at the middle. It is NOT a win or do-no-harm claim — it is evidence for whether the Route-C gain varies **monotonically with dynamic level** (a reviewer-anticipated question: "is the gain proportional to how dynamic the scene is?"). Near-zero cost (the cov net is cheap). Each win fold keeps the other two dynamic sequences in training; F-39 keeps all three heavy sequences in training.
+
 ## Risks / Trade-offs
 
 - **[PRE-REGISTERED RISK — central] Existence of signal ≠ net captures it.** This design is justified by **physical-existence** evidence (the object-motion directional signal is real, strong, deployable). Whether the net actually **learns** to orient its anisotropy along that direction (Q2b) is **not** guaranteed now. → Mitigation: verify post-training via PRE-TASK 2 (CARLA mechanism validation: cov principal axis vs ego-residual-flow direction on dynamic features). Treat a negative result as a model/feature-engineering signal, not a silent failure.
 - **[Risk] Clean-ATE net loss recurs (the C2/scalar-reliability 1.073 trap).** → Mitigation: the **do-no-harm gate** is a hard acceptance criterion — on clean sequences FOG+Route-C must show **no statistically significant ATE degradation** vs FOG-base (noise-internal fluctuation and accidental improvement are allowed; only significant worsening blocks). Multi-rep, isolated. Route C does not ship if it significantly degrades clean sequences.
 - **[Risk] Train/deploy skew in the motion input.** The C++ deploy must compute the residual flow **identically** to the training-data path. → Mitigation: extend the golden-vector parity test (C++ ↔ PyTorch < 1e-5) to the new dims; single source of the residual-flow definition.
 - **[Risk] CARLA short-sequence / FOG-in-sim caveats** (10–20 s clips; simulated FOG). → Mitigation: CARLA is used for **mechanism** evidence (per-frame cov-vs-motion), not ATE; ATE decisions are on KAIST. Documented in `FRAMEWORK2_PLAN.md`.
-- **[Trade-off] Input grows 10 → 12 dims** and requires regenerating KAIST perfeat (re-run logging, 8 sequences). → Accepted: bounded, one-time data cost; the `--vg` precedent keeps the code change small.
+- **[Trade-off] Input grows 10 → 15 dims** and requires regenerating KAIST perfeat (re-run logging, 8 sequences). → Accepted: bounded, one-time data cost; the `--vg` precedent keeps the code change small.
 
 ## Migration Plan
 
@@ -72,9 +95,15 @@ The supervision stays `ex_norm, ey_norm` (the independent wheel-SE(2)-reference 
 
 ## Open Questions
 
-- **Resolved — auxiliary `velocity` dimension:** initial scope is the residual-flow 2D vector **only**; raw velocity is deferred to a later ablation (Decision 1).
+- **Resolved — motion input is A+ (Decision 1):** raw flow `vx_j,vy_j` + wheel parts `w_dx,w_dy,w_dtheta` (10→15); the net learns ego subtraction. The earlier "residual-flow 2D / defer raw velocity" framing is superseded (it was circular). VINS-pose full-6-DOF is the Decision 4b deferred ablation.
 - **Resolved — win magnitude bar:** the concrete % is fixed by **PRE-TASK 0** from the measured FOG-base run-to-run variance on the corruption trio; not left to evaluation-time guesswork.
 - **Resolved (Decision 6) — CARLA's role:** KAIST dynamic-heavy trio is the win set (evaluated via LOSO); CARLA is the PRE-TASK 2 mechanism-validation relay (cross-dataset, after the KAIST win), not part of the win set and not a substitute for LOSO.
+
+- **OPEN — why does wheel reference-only change the VIO?** Enabling the wheel topic (reference-only, no factor) perturbs the VIO trajectory (urban28: 63% of poses bit-identical, then a gradual divergence from ~64% of the sequence, max 43 m). Confirmed: reference-only writes NO solver state (code-audited) and `WHEEL=0` (wheel factor not in the graph). The exact mechanism is NOT located. Candidates: (i) heap relative-configuration perturbation touching an address/order-sensitive computation elsewhere (e.g. ceres ordering tie-break); (ii) ROS-callback interleaving (single-thread executor handling an extra `/wheel/delta` topic changes sensor-buffer ordering). The ASLR test is NEGATIVE (PRE-TASK 0: 5 reps bit-identical under full ASLR → VIO insensitive to absolute-address layout), which WEAKENS the heap hypothesis; it is not claimed as the answer. **This mechanism does NOT affect the baseline-fairness argument** (Decision 7), so it is left an open question rather than blocking the project.
+
+### Decision 7 — wheel-on baseline (cancellation argument), with a one-time cancellation-cleanliness check
+**Chosen.** FOG+Route-C must run wheel-on (cov reads `w_*`). Since wheel-on perturbs the VIO (mechanism open), the fair baseline is FOG-base **also wheel-on (reference-only, cov-OFF)**, so the wheel perturbation appears identically on both sides and cancels under subtraction — leaving cov as the only difference. This cancellation is **mathematically independent of the mechanism** and is backed by positive code evidence (reference-only writes no solver state; `WHEEL=0`).
+**Precondition that MUST be verified (cancellation cleanliness):** the cancellation assumes the wheel perturbation is the *same thing, same size* with cov-off and cov-on. Because the mechanism is unknown, we cannot assume it does not interact with cov. → **One-time check on the first sequence**: when its wheel-on cov-OFF baseline and wheel-on cov-ON (Route C) are both available, the cov-induced difference must be a *plausible cov-effect magnitude*. If cov-on shows anomalous behaviour co-located/co-scaled with the 43 m wheel perturbation (a sequence suddenly diverging, or a difference far larger than a clean cov effect), the cancellation is NOT clean → STOP and report. Also watch per-sequence wheel-on-vs-off divergence magnitude: any sequence far exceeding urban28's 43 m, or affecting convergence, → STOP and report.
 
 ## Gate-Failure Diagnostics (Playbook)
 
