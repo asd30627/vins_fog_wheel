@@ -1,0 +1,101 @@
+## Context
+
+This change sits inside **Framework 2** of the FOG-aided VINS learned-covariance program (decision recorded in `.claude/memory/m1-fog-backbone-decision.md`; execution context in `FRAMEWORK2_PLAN.md`). Framework 2 = the learned per-feature covariance **adds on top of** the FOG backbone (it does not replace it). FOG backbone urban28 baseline ATE = **15.49**.
+
+**Current state (facts established by read-only investigation):**
+
+- The deployed `reliability_cov.onnx` is **geometry-only**: 10 inputs `[lp11, lp22, lp21, logZ, disp, inv_disp, radius, logtrack, nx, ny]`. It is consumed in `estimator.cpp::computeFeatureReliabilityAnisoLearned()` (~line 3577), which decodes the net output to an anisotropic information matrix and deploys it **shape-only** (`det≈1`, magnitude normalized out).
+- The 10 inputs are assembled in training by `dl_reliability_ws/build_perfeat_window_dataset.py` from a KAIST **perfeat CSV** (`p1_wheel_v3_codefreeze/dl_perfeat`); `train_cov_nll.py` trains, `export_cov_onnx.py` exports. The `--vg/--fog` flags already add input dims dynamically.
+- An offline diagnostic (CARLA `dynamic_dense` run01+run02; pure Python, no estimator change) showed that **after ego-flow subtraction** the per-feature object-motion residual flow is strong and directional: magnitude 4.2× (r=0.57 with `obj_speed`), within-object coherence R=0.997 (null 0.47), cross-frame stability 10.3° (static 122.5°).
+
+**Constraint:** the geometry-only net has no motion input → it cannot orient anisotropy to the object-motion direction. The physics exists in the data; the net cannot express it. Route C closes that gap by adding a motion input.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Add a **deployable, FOG-independent** per-feature motion input (full ego residual flow) so the covariance net can learn motion-aligned anisotropy.
+- Keep the training target and the shape-only deploy path unchanged; reuse the existing pipeline and `--vg`-style input-extension machinery.
+- Define **hard, quantitative** acceptance gates: do-no-harm on clean, statistically-significant win on corruption.
+- Preserve bit-invariance (env-gated, default-OFF) and golden-vector parity (C++ ↔ PyTorch).
+
+**Non-Goals:**
+- Changing the FOG/IMU/wheel backbone, or replacing FOG (that is Framework 1, REJECTED).
+- Changing to a magnitude-downweight deploy (Route A) — the directional evidence argues against it.
+- Using vg/fog cross-modal signals as the motion input (see Decision 2).
+- Mechanism validation on CARLA as a training prerequisite (it is deferred; see Decision 5).
+- Proving the net *learns* the alignment now — that is the pre-registered open risk, verified post-training.
+
+## Decisions
+
+### Decision 1 — Motion input = full ego residual flow (`velocity − predict()`), a 2D vector
+**Chosen** because the diagnostic isolated this exact quantity as the clean, directional, stable signal (10.3° cross-frame). It is deployable with no new sensors: observed flow is `FeaturePerFrame.velocity` (`feature_manager.h:65`, normalized coords, per-frame, from KLT `ptsVelocity` `feature_tracker.cpp:597-635`); ego-predicted flow comes from the wheel SE(2) `wp->dx/dy/dtheta` + the `predict()` lambda already in scope (`estimator.cpp:3602-3611`) + stereo depth `Z=baseline/disp` (`estimator.cpp:3619-3621`). At deploy the residual uses the **real wheel+gyro ego motion**, so it is cleaner than the diagnostic (which used a static-feature ego fit removing only 57%).
+**Alternatives considered:** (a) raw `velocity` only — rejected as primary because it mixes ego + object motion; **deferred to a later ablation** (initial scope is the residual-flow 2D vector only, not raw velocity). (b) gyro-only residual (vg) — rejected as the motion input: rotation-only (does not subtract wheel translation) and FOG-derived (see Decision 2).
+
+### Decision 2 — Do NOT use vg/fog as the motion input (narrative separation)
+FOG's role is **rotation precision** inside IMU preintegration — the moat. cov's motion signal must come from an **independent** source: visual optical flow vs ego-motion inconsistency. If the motion input mixed vg/fog, cov would be partly a re-packaging of FOG, inviting the reviewer question "is cov just FOG twice?". Full ego residual flow keeps the two weapons cleanly separated and non-overlapping: **FOG = rotation precision; cov = visual-vs-ego inconsistency to catch dynamic objects.** This is a deliberate, locked decision, not an empirical one.
+
+### Decision 3 — NLL training target unchanged (wheel-reference reprojection residual)
+The supervision stays `ex_norm, ey_norm` (the independent wheel-SE(2)-reference residual already produced by `build_perfeat_window_dataset.py`). Dynamic features have large, directional residuals, so the **existing** NLL-against-residual objective already teaches anisotropy **once the net has a motion input to condition on**. No new label is designed. Adding a motion input is therefore a *conditioning* change, not a supervision change.
+**Alternative considered:** a new dynamic/static or object-direction label — rejected as unnecessary and as a source of leakage/circularity.
+
+### Decision 4 — Add the input dim via the existing `--vg` mechanism; keep deploy env-gated
+`train_cov_nll.py`/`export_cov_onnx.py` already extend `INPUTS` for `--vg/--fog`; the motion input follows the same pattern, and `cov_norm.npz` (mu/sd) auto-handles new dims. The C++ deploy appends the residual-flow 2D motion input to the `feats` vector (**10 → 12**), gated by env / default-OFF so the baseline stays **bit-invariant**; golden-vector parity (`M1_covariance_parity_spec.md`) is extended by **2 dims**.
+
+### Decision 5 — Task priority: measure FOG-base variance first, then KAIST perfeat, then (deferred) CARLA mechanism data
+- **PRE-TASK 0 (required, runs FIRST):** before any Route C training, run FOG-base on the corruption trio (urban35-seoul / urban31-gangnam / urban36-seoul), **5 isolated reps**, and measure the median-ATE run-to-run variance (distribution / std). This **fixes the concrete corruption-win % threshold** (the one space currently left open). It depends on nothing in Route C, and the FOG-base variance is itself a required paper number — so it is the cheapest, earliest thing to run.
+- **PRE-TASK 1 (required):** the Route C training source is the KAIST perfeat CSV, which currently has **no per-feature velocity column** (verified). It must be regenerated after the logger change. The `sigma_uv=0` wall does **not** recur here: `lp11/lp22/lp21` are built from the wheel covariance `w_*` columns, which are populated (verified `w_valid` 100%, `w_c00/c22` 100% finite) — that wall was specific to the old fwvio CARLA parquet. (Note: `f_*`/FOG columns are empty in the current frozen CSVs, but per Decision 2 Route C does not use fog, so a fog-mode re-run is **not** required.)
+- **PRE-TASK 2 (deferred):** CARLA dynamic data regenerated via the wheel-WS perfeat logger (needs wiring `carla_stereo_player` → wheel-WS `vins_node` + a CARLA runner) is for **mechanism validation only** (does the net actually orient anisotropy to object motion — the Q2b question). It is **not** a training prerequisite and is done **only after** Route C beats the FOG baseline on KAIST.
+
+## Risks / Trade-offs
+
+- **[PRE-REGISTERED RISK — central] Existence of signal ≠ net captures it.** This design is justified by **physical-existence** evidence (the object-motion directional signal is real, strong, deployable). Whether the net actually **learns** to orient its anisotropy along that direction (Q2b) is **not** guaranteed now. → Mitigation: verify post-training via PRE-TASK 2 (CARLA mechanism validation: cov principal axis vs ego-residual-flow direction on dynamic features). Treat a negative result as a model/feature-engineering signal, not a silent failure.
+- **[Risk] Clean-ATE net loss recurs (the C2/scalar-reliability 1.073 trap).** → Mitigation: the **do-no-harm gate** is a hard acceptance criterion — on clean sequences FOG+Route-C must show **no statistically significant ATE degradation** vs FOG-base (noise-internal fluctuation and accidental improvement are allowed; only significant worsening blocks). Multi-rep, isolated. Route C does not ship if it significantly degrades clean sequences.
+- **[Risk] Train/deploy skew in the motion input.** The C++ deploy must compute the residual flow **identically** to the training-data path. → Mitigation: extend the golden-vector parity test (C++ ↔ PyTorch < 1e-5) to the new dims; single source of the residual-flow definition.
+- **[Risk] CARLA short-sequence / FOG-in-sim caveats** (10–20 s clips; simulated FOG). → Mitigation: CARLA is used for **mechanism** evidence (per-frame cov-vs-motion), not ATE; ATE decisions are on KAIST. Documented in `FRAMEWORK2_PLAN.md`.
+- **[Trade-off] Input grows 10 → 12 dims** and requires regenerating KAIST perfeat (re-run logging, 8 sequences). → Accepted: bounded, one-time data cost; the `--vg` precedent keeps the code change small.
+
+## Migration Plan
+
+0. PRE-TASK 0: run FOG-base on the corruption trio (5 isolated reps), measure median-ATE run-to-run variance, and **fix the concrete corruption-win % threshold** into the win gate. (Depends on nothing in Route C; do this first.)
+1. Land the logger + pipeline + deploy changes **env-gated / default-OFF** — baseline must remain bit-invariant (verify md5/vio-rows unchanged with the flag off).
+2. PRE-TASK 1: regenerate KAIST perfeat with velocity; retrain + export ONNX; pass golden-vector parity.
+3. Evaluate FOG-base vs FOG+Route-C on clean (do-no-harm gate) and dynamic-heavy corruption (win gate, threshold fixed in step 0), multi-rep isolated.
+4. Only if the KAIST win gate passes: PRE-TASK 2 (CARLA mechanism validation).
+5. Rollback = flip the env flag OFF (returns to the geometry-only / current behavior); no data migration needed.
+
+## Open Questions
+
+- **Resolved — auxiliary `velocity` dimension:** initial scope is the residual-flow 2D vector **only**; raw velocity is deferred to a later ablation (Decision 1).
+- **Resolved — win magnitude bar:** the concrete % is fixed by **PRE-TASK 0** from the measured FOG-base run-to-run variance on the corruption trio; not left to evaluation-time guesswork.
+- Remaining: whether to **also** include CARLA dynamic in the corruption win set or keep it for mechanism validation only (PRE-TASK 2). Current stance: KAIST dynamic-heavy trio is the win set; CARLA is mechanism-only. Revisit only if the KAIST corruption signal is too weak to clear PRE-TASK 0's noise band.
+
+## Gate-Failure Diagnostics (Playbook)
+
+Plan every branch, not only the success path. At each gate, on failure, **classify the failure and follow the indicated next step — do NOT re-design unilaterally; report and let the user decide** (see Operating Model).
+
+### G1 — Do-no-harm gate fails (significant clean degradation; the C2/1.073 trap)
+- **Check 1 — deploy integrity:** did magnitude leak into deploy? Confirm the applied per-feature matrix is still **shape-only** (det≈1 of `U`). If det deviates from 1, a bug reintroduced magnitude down-weighting → fix the deploy decode, not the model.
+- **Check 2 — scope of degradation:** is the loss across **all** clean sequences, or only one/two sensitive ones? (C2 hurt only *some* sequences.)
+  - *Single sensitive sequence* → inspect that sequence's dynamic/geometry character (is it actually clean? low-texture? aggressive motion exciting the residual-flow input?).
+  - *All clean degrade* → the motion-input conditioning is mis-shaping covariance even on clean, where residual flow ≈ ego-fit noise. Go back to **training**: check the net isn't over-reacting to small clean residual flow; consider input scaling / a clean-flow deadband / stronger regularization.
+
+### G2 — Win gate fails but do-no-harm passes — MUST distinguish two OPPOSITE failures
+The discriminator is the **cov principal-axis alignment with object motion** (Q2b / PRE-TASK 2):
+- **(a) Net did NOT learn (Q2b negative):** cov major axis does **not** align with the ego-residual-flow direction on dynamic features. → Problem is the **feature representation / network**. Next: run PRE-TASK 2 CARLA mechanism validation to confirm non-alignment, then change the input representation or net — **NOT** the test set.
+- **(b) Net learned but KAIST too mild:** cov axis **does** align, but ATE doesn't move (KAIST's heaviest dynamic is only ~2.4% outlier). → Problem is the **test arena being too clean, not the method**. Next: prove on CARLA strong-dynamic; do **NOT** change the method.
+- **KEY:** these two next steps are **opposite** (change method vs change arena). You MUST first check cov-axis alignment to tell (a) from (b) before choosing. Never assume which one it is.
+
+### G3 — NLL improves but ATE does not (task 4.4 good, but 6.1/6.2 lose) — the C2 "good intermediate, lost final" pattern
+- NLL = residual-prediction calibration; it is **not** ATE. A better-calibrated cov can leave the trajectory unchanged.
+- **Check 1 — solver leverage:** does the cov actually change the optimizer solution? With shape-only deploy the per-feature effect may be too small to move the estimate. Inspect the optimization delta (cov on vs off).
+- **Check 2 — dynamic-fraction leverage:** dynamic features are only ~1.7% of features → even correct reshaping of them has little leverage on whole-trajectory ATE. This points back to **G2(b)**: the method may be right but the regime gives it no leverage; confirm via CARLA strong-dynamic.
+
+## Operating Model (gated execution)
+
+This change is **gated, not a continuous run**. Three checkpoints stop for a human decision: **PRE-TASK 0** (fix the win threshold), **6.1** (do-no-harm), **6.2** (win). It is unlikely to produce a complete victory from one multi-day run; the expected mode is *reach a gate, bring data back, decide together*.
+
+- At each gate, **STOP and report honestly**: pass/fail + the data (per-seq median ATE, variance, paired-test result, effect size) + provenance (binary md5, commit, data batch) + **which playbook branch the result hits**.
+- **Do NOT push through a gate** unilaterally. **Do NOT tune** the PRE-TASK 0 threshold or **swap the sequence list** to make a result look better. Report pass **and** fail outcomes faithfully.
+- On failure, **map the result to the Gate-Failure Playbook**, state which failure mode it is and the playbook's recommended next step, and **hand the decision to the user — do not re-design unilaterally**.
+
+> **[NOTE — deferred, apply when reaching task 6.1]** PRE-TASK 0 measured FOG-base as **deterministic** (5-rep std ≤0.1%); FOG+Route-C is likely deterministic too. The win gate and eval-rigor requirement were already updated to reproducible-Δ / effect-size language (no p-values). The **do-no-harm gate (6.1)** still says "no statistically significant degradation" — this should be changed to reproducible-Δ language (e.g. "clean ATE must not reproducibly rise by more than ~1–2%") **when we reach 6.1**, not now. Left intentionally unchanged for now per user instruction.

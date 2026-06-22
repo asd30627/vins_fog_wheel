@@ -1,0 +1,45 @@
+## 1. PRE-TASK 0 — Measure FOG-base run-to-run variance (REQUIRED, runs FIRST)
+
+- [x] 1.1 Run FOG-base on the corruption trio (urban35-seoul, urban31-gangnam, urban36-seoul), **5 isolated reps each** (no concurrent load). **[Verification]** Confirm each run uses the fog_xsens backbone and fixed extrinsics; record provenance (binary md5, run_id, proc-exe proof). Depends on nothing in Route C. — DONE: 15/15 runs, all proc_exe=wheel binary (md5 49d1613998c2), all reliability OFF; results at …/results/route_c/pretask0_fogbase/.
+- [x] 1.2 Compute the median-ATE run-to-run variance (distribution / std) per sequence and across the trio. **[Layout]** Report as a table of per-seq median ATE + std over the 5 reps. — DONE: urban35 60.74±0.07 (CV 0.1%), urban31 108.35±0.01, urban36 260.77±0.00. FOG-base is essentially DETERMINISTIC (noise band ≈ 0).
+- [x] 1.3 **Fix the concrete corruption-win % threshold** from the measured variance and write it into the win gate (task 6.2) and the spec's corruption-win requirement. — DONE & LOCKED (user, 2026-06-22): FOG-base is deterministic (5-rep std ≤0.1%), so the bar is a meaningful effect size, not a noise-clearing test. **Primary = ≥5% median ATE reduction on the trio AND all-3 reduce (consistent direction); not 10%.** Tiered: a reproducible 0–5% reduction is reported as "below threshold", never hidden as failure. Measured FOG-base: urban35 60.74, urban31 108.35, urban36 260.77 m.
+
+## 2. PRE-TASK 1 — Regenerate KAIST perfeat with velocity (REQUIRED)
+
+- [ ] 2.1 **[Change site a]** In the C++ R1 per-feature logger, add per-feature `velocity` (and the residual-flow components) columns to the perfeat CSV. **[Verification]** Confirm `FeaturePerFrame.velocity` (feature_manager.h:65) is the source and is in normalized coords; do not recompute flow. **[Continuity]** Column names must match what `build_perfeat_window_dataset.py` BASE_COLS will read (task 4.1).
+- [ ] 2.2 Re-run KAIST perfeat logging for the 8 training sequences (`p1_wheel_v3_codefreeze/dl_perfeat` equivalents), **isolated** (per the LOAD-induced-crash lesson). **[Verification]** After each run, assert the velocity column is populated and `w_*` wheel-covariance columns remain populated (so `lp11/lp22/lp21` stay well-defined; `sigma_uv=0` must NOT recur).
+- [ ] 2.3 Record provenance (binary md5, run_id, proc-exe proof) for each regenerated CSV. **[Compliance]** Do not reuse the old frozen CSVs (no velocity column).
+
+## 3. Deploy-side motion input (env-gated, default-OFF)
+
+- [ ] 3.1 **[Change site d]** In `estimator.cpp::computeFeatureReliabilityAnisoLearned()` (~3577), compute the per-feature motion input = `velocity − predict(wheel_motion, stereo_depth)` (residual-flow **2D vector**, normalized coords), using the existing `predict()` lambda (3602-3611) and `Z=baseline/disp` (3619-3621). **[Verification]** Reuse the in-scope wheel SE(2) `wp->dx/dy/dtheta`; do NOT add IMU/FOG terms (Decision 2), and do NOT add raw velocity (residual-flow 2D only; velocity is a deferred ablation).
+- [ ] 3.2 Append the 2D motion vector to the `feats` vector (**10 → 12**). **[Compliance]** Gate behind an env flag, default-OFF; with the flag OFF the path must be bit-identical to baseline.
+- [ ] 3.3 Verify flag-OFF bit-invariance on urban28-pankyo (md5 of VIO trajectory + row count unchanged vs pre-change baseline). **[Layout]** Record the before/after md5 in the task notes.
+
+## 4. Training pipeline (follow the existing --vg precedent)
+
+- [ ] 4.1 **[Change site b]** In `dl_reliability_ws/build_perfeat_window_dataset.py`, add the velocity/residual-flow columns to BASE_COLS and emit the residual-flow 2D motion column(s) into the parquet INPUTS list. **[Verification]** Compute the residual flow identically to the C++ deploy (single definition); cross-check against task 3.1.
+- [ ] 4.2 **[Change site c]** In `train_cov_nll.py` and `export_cov_onnx.py`, extend INPUTS with the 2 motion dims (mirror the `--vg/--fog` flag pattern). **[Verification]** Confirm `cov_norm.npz` (mu/sd) is recomputed to cover all 12 dims with no manual edits.
+- [ ] 4.3 Train Route C on the regenerated KAIST perfeat; keep the NLL target unchanged (`ex_norm`, `ey_norm`). **[Compliance]** No new label column is introduced (Decision 3).
+- [ ] 4.4 Export `reliability_cov.onnx` (12-input). Sanity: held-out NLL vs the geometry-only baseline (expect improvement once motion conditioning is added).
+
+## 5. Parity
+
+- [ ] 5.1 Extend the golden-vector parity (`M1_covariance_parity_spec.md`) by the 2 motion dims. **[Verification]** PyTorch reference vs C++ onnxruntime match within 1e-5 on the 12-dim input. **[Layout]** Add the new columns to `cov_golden_vectors.csv`.
+
+## 6. Acceptance gates (KAIST) — decisive evaluation (GATED: stop and report at each gate)
+
+- [ ] 6.1 **Do-no-harm gate (hard):** FOG-base vs FOG+Route-C on the **FULL clean set** — urban28-pankyo, urban29-pankyo, urban26-dongtan, urban27-dongtan (no sampled subset), multi-rep, isolated. **[Compliance]** Pass iff there is **no statistically significant ATE degradation** of Route-C vs FOG-base (noise-internal fluctuation and accidental improvement are allowed; only significant worsening fails); avoids the scalar-reliability 1.073 net loss. **[Verification]** Report per-seq median + run-to-run variance, a **paired test** (matched reps), and an **effect size** (not only a p-value); attach provenance (onnx md5, commit, data batch) to every number. Block if failed.
+- [ ] 6.2 **Win gate (corruption):** FOG-base vs FOG+Route-C on the dynamic-heavy trio (urban35-seoul / urban31-gangnam / urban36-seoul), multi-rep, isolated. **[Compliance]** LOCKED (task 1.3): bar = **≥5% median ATE reduction AND all-3 reduce (consistent direction)**; bar and sequence list do NOT change mid-evaluation. **[Verification]** Report **reproducible per-seq ATE Δ + % reduction + effect size** (NOT a p-value — FOG-base is deterministic); compare vs the measured FOG-base (60.74 / 108.35 / 260.77 m); attach provenance to every number. **[Layout]** Report clean (do-no-harm) and corruption (decisive) as one table. **Tiered honesty:** a reproducible 0–5% reduction is reported as "below threshold", never hidden as failure; report pass / below-threshold / fail faithfully.
+- [ ] 6.3 **At every gate (PRE-TASK 0, 6.1, 6.2): STOP and report; do NOT push through.** **[Audience]** Report pass/fail + data + provenance + which Gate-Failure Playbook branch (design.md G1/G2/G3) the result hits. **[Conflict]** On failure, map to the playbook, state the failure mode and its recommended next step, and hand the decision to the user — do NOT re-design, re-tune the threshold, or swap sequences unilaterally. For a win-gate failure specifically, FIRST check cov principal-axis alignment (G2) to tell "net didn't learn (a)" from "arena too mild (b)" before proposing any next step.
+
+## 7. PRE-TASK 2 — CARLA mechanism validation (DEFERRED; only after task 6.2 passes)
+
+- [ ] 7.1 **[Conflict]** Gate check: proceed ONLY if the KAIST win gate (6.2) passed. Otherwise stop and re-design — do not regenerate CARLA data speculatively.
+- [ ] 7.2 Wire `carla_stereo_player` (fwvio_ws) → wheel-WS `vins_node` over topics + add a CARLA runner; regenerate CARLA dynamic perfeat via the **wheel-WS** logger (the OLD parquets with `sigma_uv=0` are unusable). **[Verification]** Confirm the new perfeat schema matches the KAIST one (velocity + `w_*` populated).
+- [ ] 7.3 **Mechanism test (Q2b):** on CARLA dynamic features, measure the cov principal-axis direction vs the ego-residual-flow direction; report alignment. **[Audience]** Frame the result honestly as the pre-registered risk check — existence of signal ≠ net captures it; a negative is a feature-engineering signal, not a silent pass.
+
+## 8. Documentation
+
+- [ ] 8.1 Update `FRAMEWORK2_PLAN.md` step (a) to reflect Route C (motion-conditioned anisotropic cov), the residual-flow 2D motion input, and the PRE-TASK 0 / 1 / 2 priority. **[Continuity]** Keep terminology consistent with this change's spec (motion input = full ego residual flow; FOG-independent).
+- [ ] 8.2 **[Flow Review]** Read proposal.md, design.md, the delta spec, and this task list end-to-end; verify the motion-input definition (residual-flow 2D, 10→12), the four change sites, the PRE-TASK 0 win-threshold flow, the do-no-harm "no significant degradation" standard, the PRE-TASK priority, the **Gate-Failure Playbook (G1/G2/G3)**, the **Operating Model (gated, stop-and-report, no unilateral re-design)**, and the **evaluation-rigor / anti-cherry-pick** requirement are stated consistently across all artifacts with no contradictions or dangling "TBD"s.
