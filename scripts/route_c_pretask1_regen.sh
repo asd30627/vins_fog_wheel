@@ -24,6 +24,7 @@ echo "[PRE1] start $RUN_ID  bin_md5=$BIN_MD5  commit=$COMMIT"
 export USE_EXPLICIT_FIXEDEXT=1
 export REL_PERFEAT_LOG=1
 export REL_WHEEL_REFERENCE_ONLY=1
+export PUBLISH_WHEEL_TOPIC=1   # player端: 播 wheel encoder -> /wheel/delta (estimator端 REL_WHEEL_REFERENCE_ONLY 才有資料可建 preint)
 export REL_PERFEAT_CSV_PATH="$OUT/perfeat_${SEQ}.csv"
 export REL_SEQUENCE_NAME="$SEQ"
 export REL_RUN_ID="$RUN_ID"
