@@ -90,21 +90,22 @@ VIO_TO_TUM="${SATA_BASE}/tools/vio_csv_to_tum.py"
 VINS_CONFIG="${VINS_WS}/src/VINS-Fusion-ROS2-jazzy/config/kaist/kaist_stereo_xsens.yaml"
 
 # =========================================================
-# Explicit fixed-extrinsic config selection (opt-in)
+# Fixed-extrinsic config selection — SINGLE SOURCE OF TRUTH, no silent fallback.
 #
-#   USE_EXPLICIT_FIXEDEXT=1  -> require a per-sequence explicit fixedext
-#                               config that embeds body_T_cam0/cam1 directly
-#                               (estimate_extrinsic:0, extrinsic_source tag).
-#                               If the config is missing -> FAIL FAST. No
-#                               silent fallback to dataset-derived extrinsic.
-#   USE_EXPLICIT_FIXEDEXT=0  -> legacy behaviour: base template + run-time
-#                               extrinsic source decided inside VINS.
-#
-# Default is 0 to preserve existing batches (incl. non-11 sequences). For the
-# 11 KAIST sequences used in the integrity/clean experiments, export
-# USE_EXPLICIT_FIXEDEXT=1 to get explicit, self-contained extrinsics.
+#   USE_EXPLICIT_FIXEDEXT=1  (DEFAULT)  -> use the per-sequence explicit fixedext
+#       config config/kaist_fixedext/kaist_<seq>_fixedext.yaml (estimate_extrinsic:0,
+#       body_T_cam0/1 embedded). If missing -> FAIL FAST (no dataset-derived fallback).
+#   USE_EXPLICIT_FIXEDEXT=0  -> legacy base-template extrinsic (kaist_stereo_xsens.yaml).
+#       This is a DIFFERENT, non-per-seq-calibrated extrinsic and is NOT valid for any
+#       comparison run. To make it impossible to SILENTLY run with the wrong extrinsic,
+#       this path now requires an explicit ALLOW_LEGACY_BASE_EXTRINSIC=1 acknowledgement,
+#       else it errors. (2026-06-22 root cause: a run that forgot USE_EXPLICIT_FIXEDEXT=1
+#       silently fell back to base-template body_T_cam0 tx=1.71239 instead of fixedext
+#       tx=1.45166 -> urban28 cov-OFF blew up to ATE 632 m vs the correct 18.82 m.)
+#   Net: every run either uses the correct fixedext, or STOPS. Never silently wrong.
 # =========================================================
-USE_EXPLICIT_FIXEDEXT="${USE_EXPLICIT_FIXEDEXT:-0}"
+USE_EXPLICIT_FIXEDEXT="${USE_EXPLICIT_FIXEDEXT:-1}"          # DEFAULT 1: always fixedext unless explicitly overridden
+ALLOW_LEGACY_BASE_EXTRINSIC="${ALLOW_LEGACY_BASE_EXTRINSIC:-0}"
 FIXEDEXT_CONFIG_DIR="${VINS_WS}/config/kaist_fixedext"
 
 if [[ "${USE_EXPLICIT_FIXEDEXT}" == "1" ]]; then
@@ -118,8 +119,20 @@ if [[ "${USE_EXPLICIT_FIXEDEXT}" == "1" ]]; then
   VINS_CONFIG="${EXPLICIT_VINS_CONFIG}"
   echo "[FIXED_EXTRINSIC] USE_EXPLICIT_FIXEDEXT=1 source=explicit_fixedext_config"
   echo "[FIXED_EXTRINSIC] VINS_CONFIG = ${VINS_CONFIG}"
+elif [[ "${ALLOW_LEGACY_BASE_EXTRINSIC}" == "1" ]]; then
+  echo "[FIXED_EXTRINSIC][WARN] =============================================================="
+  echo "[FIXED_EXTRINSIC][WARN] USE_EXPLICIT_FIXEDEXT=0 + ALLOW_LEGACY_BASE_EXTRINSIC=1:"
+  echo "[FIXED_EXTRINSIC][WARN] using BASE-TEMPLATE extrinsic ${VINS_CONFIG}"
+  echo "[FIXED_EXTRINSIC][WARN] This is NOT the per-seq calibrated extrinsic and is NOT valid"
+  echo "[FIXED_EXTRINSIC][WARN] for any baseline / ON-vs-OFF / wheel comparison. You asked for it."
+  echo "[FIXED_EXTRINSIC][WARN] =============================================================="
 else
-  echo "[FIXED_EXTRINSIC] USE_EXPLICIT_FIXEDEXT=0 (legacy run-time extrinsic source); VINS_CONFIG = ${VINS_CONFIG}"
+  echo "[ERROR] USE_EXPLICIT_FIXEDEXT=0 but ALLOW_LEGACY_BASE_EXTRINSIC!=1."
+  echo "[ERROR] Refusing to SILENTLY run with the non-calibrated base-template extrinsic"
+  echo "[ERROR] (${VINS_CONFIG}) — this was the 2026-06-22 632 m blowup root cause."
+  echo "[ERROR] Fix: unset USE_EXPLICIT_FIXEDEXT (default=1 -> correct fixedext per seq),"
+  echo "[ERROR] or, only if you REALLY want the legacy base extrinsic, set ALLOW_LEGACY_BASE_EXTRINSIC=1."
+  exit 1
 fi
 
 VINS_CONFIG_DIR="$(dirname "${VINS_CONFIG}")"

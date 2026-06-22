@@ -5,7 +5,7 @@
 #  - strict isolation: ONE VINS at a time, sequential, nothing else heavy running
 #  - completion precondition: each run MUST be FULL (~19735 rows / span >= 1970 s). Truncated => invalid, escalate rate.
 # Same binary, cov-OFF (no REL_ANISO_INFO / RC_APLUS), wheel-on env identical to the dd8d1e0 baseline.
-set -uo pipefail
+set -o pipefail   # NOT -u: `set -u` + `source ros setup.bash` aborts (ROS setup references unset vars)
 SEQ=urban28-pankyo
 WS=/home/ivlab3/fwvio_estimator_ws_wheel
 EXT=/mnt/sata4t/datasets/kaist_complex_urban/extracted
@@ -28,6 +28,7 @@ run_once () {  # $1=rate-tag(1p0/0p5) $2=idx -> sets RUN_SPAN RUN_ROWS, copies v
   local tag="$1" idx="$2"
   local TEMPLATE="$WS/src/kaist_player/config/urban28_pankyo_fog_pb${tag}.yaml"
   local OUTDIR="$OUTBASE/pb${tag}_r${idx}"; mkdir -p "$OUTDIR"
+  export USE_EXPLICIT_FIXEDEXT=1   # MUST use per-seq fixedext extrinsic (the missing export caused the 632m blowup)
   export REL_PERFEAT_LOG=1 REL_WHEEL_REFERENCE_ONLY=1 PUBLISH_WHEEL_TOPIC=1
   export REL_PERFEAT_CSV_PATH="$OUTDIR/perfeat_throwaway.csv" REL_SEQUENCE_NAME="$SEQ"
   unset REL_ANISO_INFO RC_APLUS REL_USE_LEARNED_MODEL REL_ONNX_PATH
