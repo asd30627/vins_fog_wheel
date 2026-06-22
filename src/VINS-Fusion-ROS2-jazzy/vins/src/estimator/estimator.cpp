@@ -3341,7 +3341,11 @@ void Estimator::setupPerFeatLogger()
         "tic0_x,tic0_y,tic0_z,ric0_x,ric0_y,ric0_z,ric0_w,"
         "tic1_x,tic1_y,tic1_z,ric1_x,ric1_y,ric1_z,ric1_w,"
         // M0 task7: FOG/gyro cross-modal (rotation-only) per-feature flow residual at frame j
-        "vg_res,vg_res_min,vg_cos,vg_ratio";
+        "vg_res,vg_res_min,vg_cos,vg_ratio,"
+        // PRE-TASK 1 / Route C: raw observed optical flow at frame j (normalized coords).
+        // Motion-input source; full ego residual flow = (vx_j,vy_j) - predict(wheel) is derived downstream
+        // (build_perfeat_window_dataset.py) and at deploy. Logging-only; never feeds the optimization.
+        "vx_j,vy_j";
 
     try
     {
@@ -3472,6 +3476,8 @@ void Estimator::writePerFeatRows(double header)
             }
         }
         line << "," << vg_res << "," << vg_res_min << "," << vg_cos << "," << vg_ratio;
+        // PRE-TASK 1 / Route C: raw observed optical flow at frame j (normalized coords)
+        line << "," << fj.velocity.x() << "," << fj.velocity.y();
         perfeat_logger.append(line.str());
     }
     perfeat_logger.flush();

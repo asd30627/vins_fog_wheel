@@ -9,3 +9,5 @@ install/
 log/
 docspec/
 third_party/
+# runner-generated transient VINS configs (not source)
+config/kaist_fixedext/vins_config_tmp_*.yaml
