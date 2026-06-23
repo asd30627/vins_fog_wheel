@@ -41,8 +41,12 @@ run_rep(){  # $1=idx $2=rate-tag -> sets RUN_SPAN; returns 0 if full
   if [[ $rc -ne 0 || ! -s "$SCRATCH/vins_raw/vio.tum" ]]; then echo "[P1BASE] $SEQ rep${i} RUNNER FAILED rc=$rc"; tail -15 "$OUT/runner.log"; return 2; fi
   cp -f "$SCRATCH/vins_raw/vio.tum" "$OUT/vio.tum"; cp -f "$SCRATCH/metrics/ape_vio.txt" "$OUT/ape_vio.txt" 2>/dev/null || true
   read RUN_SPAN rw < <(sr_of "$OUT/vio.tum")
-  local full=$(awk -v s="$RUN_SPAN" 'BEGIN{print (s>=1970.0)?1:0}')
-  echo "[P1BASE] $SEQ rep${i} (pb${tag}) DONE span=${RUN_SPAN}s rows=${rw} ate=$(ate_of "$OUT/ape_vio.txt") md5=$(md5sum "$OUT/vio.tum"|cut -d' ' -f1) full=${full}"
+  # full = VIO reaches the GT end (per-seq AUTO, NO hardcoded seconds; seqs differ:
+  # urban35~172.7s / urban31~1014s / urban36~352s / urban28~1973s). full iff vio_last >= gt_last - 10s.
+  local gt_last=$(awk 'END{print $1}' "$GT" 2>/dev/null)
+  local vio_last=$(awk 'END{print $1}' "$OUT/vio.tum" 2>/dev/null)
+  local full=$(awk -v v="$vio_last" -v g="$gt_last" 'BEGIN{print (g>0 && v >= g-10.0)?1:0}')
+  echo "[P1BASE] $SEQ rep${i} (pb${tag}) DONE span=${RUN_SPAN}s rows=${rw} vio_last=${vio_last} gt_last=${gt_last} ate=$(ate_of "$OUT/ape_vio.txt") md5=$(md5sum "$OUT/vio.tum"|cut -d' ' -f1) full=${full}"
   [[ "$full" -eq 1 ]] && return 0 || return 1
 }
 
