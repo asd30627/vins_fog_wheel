@@ -185,6 +185,9 @@ class KaistPlayerNode(Node):
         self.declare_parameter('encoder_param_txt',
                                'calibration/urban28-pankyo/calibration/EncoderParameter.txt')
         self.declare_parameter('wheel_topic', '/wheel/delta')
+        # P1-Wheel C2: dump the (deterministic) per-sample wheel deltas the player publishes, for
+        # estimator-side preload that removes the /wheel/delta callback race. '' = disabled.
+        self.declare_parameter('dump_wheel_path', '')
         # P1-FogWheel: FOG yaw -> /fog/yaw. publish_fog_topic default false.
         self.declare_parameter('publish_fog_topic', False)
         self.declare_parameter('fog_topic', '/fog/yaw')
@@ -301,6 +304,7 @@ class KaistPlayerNode(Node):
         gt_csv_param = self.get_parameter('gt_csv').value
         self.publish_wheel_topic = bool(self.get_parameter('publish_wheel_topic').value)
         self.wheel_topic = str(self.get_parameter('wheel_topic').value)
+        self.dump_wheel_path = str(self.get_parameter('dump_wheel_path').value)
         self.publish_fog_topic = bool(self.get_parameter('publish_fog_topic').value)
         self.fog_topic = str(self.get_parameter('fog_topic').value)
         self.encoder_csv = None; self.encoder_param_txt = None
@@ -387,6 +391,8 @@ class KaistPlayerNode(Node):
         wheel_events: List[Event] = []
         if self.publish_wheel_topic:
             wheel_events = self._load_wheel_events()
+            if self.dump_wheel_path:
+                self._dump_wheel_events(wheel_events)
         fog_yaw_events: List[Event] = []
         if self.publish_fog_topic and self.fog_csv is not None:
             fog_yaw_events = self._load_fog_yaw_events()
@@ -894,6 +900,19 @@ class KaistPlayerNode(Node):
         msg.header.frame_id = 'wheel'
         msg.vector.x = w.dl; msg.vector.y = w.dr; msg.vector.z = w.df   # left, right, forward [m]
         self.pub_wheel.publish(msg)
+
+    def _dump_wheel_events(self, wheel_events: List['Event']) -> None:
+        """P1-Wheel C2: dump the EXACT per-sample wheel deltas the player publishes (ts_ns,dl,dr,df),
+        %.17g round-trippable doubles, for deterministic estimator-side preload. dl/dr/df are the SAME
+        WheelDelta fields _publish_wheel sends (msg.vector.x/y/z) -> dump == publish by construction."""
+        n = 0
+        with open(self.dump_wheel_path, 'w') as fo:
+            fo.write('# ts_ns,dl,dr,df  (C2 wheel preload; %.17g round-trippable doubles)\n')
+            for e in wheel_events:
+                w = e.payload
+                fo.write('%d,%.17g,%.17g,%.17g\n' % (w.ts_ns, w.dl, w.dr, w.df))
+                n += 1
+        self.get_logger().info(f'C2 wheel dump: {n} samples -> {self.dump_wheel_path}')
 
     def _load_fog_yaw_events(self) -> List[Event]:
         """FOG yaw increments per sample (axis/sign applied via _load_fog_samples; const yaw-rate bias removed).

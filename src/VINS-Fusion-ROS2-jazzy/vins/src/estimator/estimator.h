@@ -256,6 +256,7 @@ class Estimator
     WheelPreintegration *wheel_pre_integrations[(WINDOW_SIZE + 1)] = {nullptr};
     bool wheelAvailable(double t);
     void buildWheelPreint(int idx, double t0, double t1);
+    size_t preloadWheelFromFile(const std::string& path);   // P1-Wheel C2: deterministic wheel preload; returns #samples (0 => caller must fail-hard)
     // frozen WHEEL_MODEL.md params (YAML-overridden in C3)
     double wheel_b_ = 1.52439, wheel_sigmaL_ = 0.02, wheel_sigmaR_ = 0.02, wheel_yaw_scale_ = 1.0, wheel_huber_ = 1.0;
     Vector3d acc_0, gyr_0;

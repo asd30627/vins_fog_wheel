@@ -13,6 +13,7 @@
 // This file remains part of a GPL-3.0-licensed derivative work.
 // See the repository root LICENSE and THIRD_PARTY_NOTICES.md.
 #include <stdio.h>
+#include <cstdlib>   // P1-Wheel C2: std::getenv / std::exit for the wheel-preload hook
 #include <queue>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <map>
@@ -348,6 +349,34 @@ int main(int argc, char **argv)
     readParameters(config_file);
     estimator.setParameter();
 
+    // P1-Wheel C2: deterministic wheel preload (env REL_WHEEL_PRELOAD = dumped ts_ns,dl,dr,df file).
+    // When set, the wheel deltas are loaded into wheel_buffer up-front and the /wheel/delta subscription
+    // is skipped below -> the async callback race that made wheel-on runs non-deterministic is removed.
+    std::string wheel_preload_path;
+    if (const char* e = std::getenv("REL_WHEEL_PRELOAD")) wheel_preload_path = e;
+    if (!wheel_preload_path.empty()) {
+        // Fail-hard: REL_WHEEL_PRELOAD set => /wheel/delta subscription is skipped below. If the preload
+        // file is missing/empty, the run would SILENTLY become no-wheel (NOT C2 deterministic) and pollute
+        // the Step 3/4 verdict. Refuse to run unless we actually loaded > 0 wheel samples.
+        size_t n_wheel_preload = estimator.preloadWheelFromFile(wheel_preload_path);
+        if (n_wheel_preload == 0) {
+            ROS_ERROR("[C2] wheel preload FAILED or empty: %s", wheel_preload_path.c_str());
+            rclcpp::shutdown();
+            std::exit(7);
+        }
+        // FOG guard (no silent re-introduction of the race): C2 preloads wheel only. If a FOG *reference*
+        // path is enabled, it still rides the async /fog/yaw callback -> the race would come back via FOG.
+        // Refuse to run (error, not warning) until FOG reference is off or a FOG preload is provided.
+        if (FOG_YAW_ENABLE || FOG_YAW_REFERENCE_ONLY) {
+            ROS_ERROR("[C2] wheel preload ON but FOG reference is enabled (FOG_YAW_ENABLE=%d "
+                      "FOG_YAW_REFERENCE_ONLY=%d) with NO FOG preload -> would reintroduce the callback "
+                      "race via /fog/yaw. Refusing. Disable FOG reference, or add FOG preload.",
+                      FOG_YAW_ENABLE, FOG_YAW_REFERENCE_ONLY);
+            rclcpp::shutdown();
+            std::exit(7);
+        }
+    }
+
     estimator.setReliabilityFeatureJsonCallback(
         [](const std::string &json_str)
         {
@@ -386,8 +415,14 @@ int main(int argc, char **argv)
     }
     // P1-Wheel: always subscribe; harmless when player does not publish (B0). Estimator only uses
     // the buffer when WHEEL_FACTOR_ENABLE=1, so subscribing does not change B0 behaviour.
-    auto sub_wheel = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
-        "/wheel/delta", rclcpp::QoS(rclcpp::KeepLast(2000)), wheel_callback);
+    // P1-Wheel C2: when wheel is preloaded (REL_WHEEL_PRELOAD set), SKIP the subscription so the async
+    // callback never runs -> removes the race. The preloaded wheel_buffer supplies the data instead.
+    rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr sub_wheel;
+    if (wheel_preload_path.empty())
+        sub_wheel = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
+            "/wheel/delta", rclcpp::QoS(rclcpp::KeepLast(2000)), wheel_callback);
+    else
+        ROS_WARN("[C2] wheel preloaded -> /wheel/delta subscription SKIPPED (callback race removed)");
     auto sub_fog = n->create_subscription<geometry_msgs::msg::Vector3Stamped>(
         "/fog/yaw", rclcpp::QoS(rclcpp::KeepLast(5000)), fog_yaw_callback);
 

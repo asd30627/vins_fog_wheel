@@ -21,6 +21,8 @@
 #include <numeric>
 #include <vector>
 #include <cstdlib>
+#include <fstream>   // P1-Wheel C2: std::ifstream for preloadWheelFromFile (explicit, not indirect)
+#include <cstdio>    // P1-Wheel C2: std::sscanf for preloadWheelFromFile (explicit, not indirect)
 #include <sstream>
 #include <iomanip>
 #include <limits>
@@ -1090,6 +1092,32 @@ void Estimator::buildWheelPreint(int idx, double t0, double t1)
     mWheel.unlock();
     wp->valid = (wp->n_samples > 0);
     wheel_pre_integrations[idx] = wp;
+}
+
+// P1-Wheel C2: deterministic preload. Read the player-dumped per-sample wheel deltas (ts_ns,dl,dr,df;
+// %.17g round-trippable) into wheel_buffer ONCE at startup instead of the async /wheel/delta callback.
+// t is reconstructed EXACTLY as wheel_callback does (t = sec + nsec*1e-9 from ts_ns split) so the
+// buildWheelPreint timestamp window (t0<ts<=t1) selects the identical samples. No callback => no race;
+// no pruning (load all; ~200k samples ~6 MB). buildWheelPreint still enforces causality per-frame.
+size_t Estimator::preloadWheelFromFile(const std::string& path)
+{
+    std::ifstream in(path);
+    if (!in.is_open()) { ROS_ERROR("[C2] wheel preload open FAILED: %s", path.c_str()); return 0; }
+    mWheel.lock();
+    wheel_buffer.clear();
+    size_t n = 0; std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        long long ts_ns = 0; double dl = 0, dr = 0, df = 0;
+        if (std::sscanf(line.c_str(), "%lld,%lf,%lf,%lf", &ts_ns, &dl, &dr, &df) != 4) continue;
+        long long sec = ts_ns / 1000000000LL, nsec = ts_ns % 1000000000LL;
+        double t = (double)sec + (double)nsec * 1e-9;   // identical to wheel_callback's stamp->t
+        wheel_buffer.push_back({t, dl, dr, df});
+        ++n;
+    }
+    mWheel.unlock();
+    ROS_WARN("[C2] wheel preload: %zu samples from %s (/wheel/delta callback race removed)", n, path.c_str());
+    return n;   // 0 => open ok but no valid samples; caller fail-hards
 }
 
 // P1-FogWheel: FOG yaw raw input + preintegration build (mirror of wheel).
