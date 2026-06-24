@@ -16,6 +16,13 @@
 
 **Why the new positioning has real novelty and bypasses Huber.** "Trusting FOG more = trusting vision less" is two sides of one coin: in bundle adjustment all factors compete jointly, so raising the FOG information gives FOG more say on rotation and the relative influence of vision falls out automatically — **without touching the visual factors (which would hit Huber), only by strengthening the FOG side.** Code-path-wise, `HuberLoss(1.0)` acts only on the three visual `ProjectionFactor`s (mono/stereo/marg); the FOG yaw factor and IMU factors are NULL loss. The AI acts on the FOG/IMU side → it never touches Huber. This is a deliberate architectural choice, and the cross-sensor-grade arbitration question is one no prior work has addressed (see RELATED_WORK_DIFF.md).
 
+**Dual-contribution structure (the paper is positioned on two parallel contributions, not one bet).** The work is framed from the start as two contributions standing side by side, so its value does not hinge on a single hypothesis ("the AI fusion wins"):
+
+- **Contribution 1 (foundation — does not bet on the AI):** a systematic cross-grade FOG-VINS evaluation, an anti-cherry-pick evaluation framework, and a three-grade benchmark. This is a **methodology + systems** contribution.
+- **Contribution 2 (bonus — bets on the AI):** the grade-conditioned AI arbitration (the three innovations below). If the AI wins, Contribution 2 stands and adds value on top; if the AI gain is not significant, Contribution 1 still stands independently and the paper's foundation is unshaken.
+
+The framing is **"does Contribution 2 hold"**, not "main line vs fallback" — whether or not the AI wins, Contribution 1 is unaffected. This is a positioning reframe, not a change to any red line (the five anchors, rotation-only scope, and the Anchor-2 structural lock are unchanged). **Honest pre-registration (do not hide):** Contribution 1 is **not** guaranteed to hold either — it depends on the same preconditions passing (Pit 1 per-segment isolation, CARLA fidelity calibration, and a cross-grade curve that stands up). Contribution 1 is *more likely to hold and less dependent on the AI* than Contribution 2, but it still requires baseline determinism + CARLA fidelity + Pit-1 isolation to all pass. Both contributions pre-register their preconditions (see design.md Risks); the dual structure reduces the single-point-of-failure risk, it does not eliminate it.
+
 ## What Changes
 
 Three innovations, all conditioned on the AI living in the fusion layer:

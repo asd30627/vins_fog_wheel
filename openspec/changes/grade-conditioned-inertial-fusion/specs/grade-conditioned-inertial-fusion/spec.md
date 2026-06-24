@@ -32,18 +32,34 @@ The study SHALL use a fixed, official set of discrete FOG grades defined by **Al
 - **WHEN** the official grade list is finalised
 - **THEN** it includes a bias=0.05°/hr point aligned to KAIST and a ~10°/hr general-IMU point, in addition to the four base PROFILES
 
-### Requirement: Grade comparison is admitted only under visually-healthy conditions (Pit 1 — survival-critical)
-The grade-vs-accuracy comparison (Curve 1 and the AI-gain Curve 2) SHALL be computed **only on sequences/segments where the visual front-end is healthy**, so that "grade effect" cannot be contaminated by visual scale-collapse. A sequence/segment is admissible for grade comparison ONLY IF the `ideal_imu` grade run on it is healthy, defined as `est_scale ∈ [0.85, 1.15]`. The primary comparison SHALL use the **120 s sequences** (confirmed 6/6 ideal healthy, no collapse); the **300 s sequences** SHALL be used only as a visually-good-subset corroboration; long/poor sequences on which `ideal_imu` itself collapses SHALL be excluded. This constraint exists because the project's own `V21_300S_GRADE_DIAGNOSIS.md` shows grade↔bad_union Spearman only 0.705 and industrial/precision degradation is often visual scale-collapse, not IMU grade — the cross-grade conclusion does not hold if this is not isolated.
+### Requirement: Grade comparison is admitted by a per-segment visual-health gate (Pit 1 — survival-critical)
+The grade-vs-accuracy comparison (Curve 1 and the AI-gain Curve 2) SHALL be computed only on data where the visual front-end is healthy, so that "grade effect" cannot be contaminated by visual scale-collapse. The visual-health gate SHALL be evaluated at the **per-segment (time-window) granularity**, NOT at the whole-sequence granularity: a segment is admissible for grade comparison ONLY IF the `ideal_imu` grade run is healthy **on that segment**, defined as the segment-local `est_scale ∈ [0.85, 1.15]`. A sequence is NOT admitted or rejected as a whole — its admissible segments are kept and its collapsed segments are dropped.
 
-#### Scenario: Inadmissible (visually-collapsed) data is excluded
-- **WHEN** a candidate sequence/segment is considered for the grade comparison
-- **THEN** it is admitted only if the `ideal_imu` run on it is healthy (`est_scale ∈ [0.85, 1.15]`)
-- **AND** any sequence where `ideal_imu` itself collapses is excluded from all cross-grade claims
+This granularity refinement is required because Innovation 3's core selling point is **dynamic scenes**, and dynamic scenes inherently cause **local** visual corruption; a whole-sequence health gate would discard otherwise-healthy sequences for a local perturbation and could starve the dynamic×healthy data window. Two things MUST be kept distinct: (i) **local dynamic perturbation** (vision locally corrupted but still working, segment scale healthy) is the **signal to study** and SHALL be retained; (ii) **scale collapse** (the segment's `ideal_imu` scale leaves `[0.85, 1.15]`) is the **contamination to exclude** and SHALL be dropped. The per-segment gate keeps (i) and removes (ii).
+
+**Scope guard (do NOT over-reach):** this refinement changes only the *granularity* of the existing health gate (whole-sequence → per-segment). It SHALL NOT introduce "degree of visual pollution" as a second independent variable (that is the rejected option C and would inflate scope). The dynamic level remains the scene condition of Innovation 3, not a regressor. All other locks are unchanged: discrete grade points, rotation-only scope, no touching the visual factors / Huber, Anchor 2.
+
+The primary comparison SHALL use the **120 s sequences** (confirmed 6/6 ideal healthy, minimal collapse); the **300 s sequences** SHALL be used only as a visually-good-subset corroboration. This constraint exists because the project's own `V21_300S_GRADE_DIAGNOSIS.md` shows grade↔bad_union Spearman only 0.705 and industrial/precision degradation is often visual scale-collapse, not IMU grade — the cross-grade conclusion does not hold if this is not isolated.
+
+#### Scenario: Per-segment gate drops collapsed segments, keeps the rest of the sequence
+- **WHEN** a sequence is considered for the grade comparison
+- **THEN** the visual-health gate is applied per segment using the segment-local `ideal_imu` `est_scale ∈ [0.85, 1.15]`
+- **AND** collapsed segments are dropped while the sequence's admissible segments are retained (the sequence is not admitted/rejected as a whole)
+
+#### Scenario: Local dynamic perturbation is retained as signal, not excluded as contamination
+- **WHEN** a segment has local dynamic perturbation (vision locally corrupted) but its segment-local `ideal_imu` scale is healthy (`∈ [0.85, 1.15]`)
+- **THEN** that segment is retained as part of the dynamic-scene signal under study
+- **AND** only segments whose `ideal_imu` scale collapses out of `[0.85, 1.15]` are excluded as contamination
+
+#### Scenario: Granularity change does not add a pollution regressor (no option C)
+- **WHEN** the per-segment gate is implemented
+- **THEN** it gates admission by segment-local visual health only, and does NOT turn "degree of visual pollution" into a second independent variable
+- **AND** discrete grades, rotation-only scope, and the no-touch-visual-factors lock (Anchor 2) remain unchanged
 
 #### Scenario: 120 s primary, 300 s corroboration
 - **WHEN** the cross-grade curves are produced
 - **THEN** the primary comparison uses the 120 s sequences and the 300 s sequences serve only as a visually-good-subset corroboration
-- **AND** the report states that grade differences measured on visually-collapsed data would conflate visual collapse with FOG grade
+- **AND** the report states that grade differences measured on visually-collapsed segments would conflate visual collapse with FOG grade
 
 ### Requirement: Grade injection and wheel data are merged (Pit 2)
 The grade-injection capability (currently gyro-only on the 37G `v21_300s_grade_matrix`, no wheel) SHALL be merged with wheel-speed data before grade-conditioned fusion is trained/evaluated: either grade injection is wired into the wheel-carrying pipeline (`carla_fwvio`, CSV with wheel + synth FOG) or wheel is added to the grade matrix. The resulting per-sequence data SHALL carry grade-injected gyro AND wheel together.
