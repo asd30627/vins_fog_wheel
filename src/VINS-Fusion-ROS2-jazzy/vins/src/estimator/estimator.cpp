@@ -3721,6 +3721,10 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
     // OFF -> the stored U is identical to the shape-only path (gate-binary behavior, bit-identical to 15a57897).
     static const bool   KEEP_MAG   = [](){ const char* e=std::getenv("REL_KEEP_MAGNITUDE"); return e && std::atoi(e)>0; }();
     static const double KEEP_MAG_R = [](){ const char* e=std::getenv("REL_KEEP_MAG_CLAMP"); double r=e?std::atof(e):0.0; return r>1.0?r:10.0; }();
+    // REL_KEEP_MAG_ALPHA (env, default 0): magnitude-dosage knob. per-feat factor m = (lbar_k/G)^alpha,
+    // then gentle clamp [1/R, R]. alpha=0 -> m=1 (pure shape-only, bit-identical 15a57897); alpha=1 -> full
+    // magnitude (the earlier blow-up); 0<alpha<1 -> partial dose. Smooth ramp from the safe shape-only point.
+    static const double KEEP_MAG_ALPHA = [](){ const char* e=std::getenv("REL_KEEP_MAG_ALPHA"); return e?std::atof(e):0.0; }();
     auto softplus=[](double x){ return x>20.0?x:std::log1p(std::exp(x)); };
     int n_aniso=0; double rsum=0;
     std::vector<int> km_fid; std::vector<Eigen::Matrix2d> km_U; std::vector<double> km_lbar;  // keep-mag deferred
@@ -3745,16 +3749,33 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
         // per-window geometric mean of the per-feature confidence scale (sqrt det Lambda = lbar)
         double slog=0; for(double lb: km_lbar) slog+=std::log(std::max(lb,1e-30));
         const double G=std::exp(slog/(double)km_lbar.size());
-        int clamp_lo=0, clamp_hi=0;
+        // GUARD 1: alpha~0 -> exact shape-only short-circuit (m=1, no pow). Guarantees bit-identical to
+        // 15a57897 by construction, not by floating-point luck (pow(x,0) could differ for pathological x).
+        const bool ALPHA_ZERO = (std::fabs(KEEP_MAG_ALPHA) < 1e-9);
+        int clamp_lo=0, clamp_hi=0, guard_fb=0;   // guard_fb = #feats that hit a numeric fallback (m forced to 1)
         for (size_t k=0;k<km_fid.size();++k){
-            double m=km_lbar[k]/G;                                   // relative info magnitude vs window geomean
-            if      (m<1.0/KEEP_MAG_R){ m=1.0/KEEP_MAG_R; ++clamp_lo; }
-            else if (m>KEEP_MAG_R)    { m=KEEP_MAG_R;     ++clamp_hi; }
+            double m;
+            if (ALPHA_ZERO){
+                m=1.0;                                               // pure shape-only
+            } else {
+                double ratio = km_lbar[k]/G;                         // relative info magnitude vs window geomean
+                // GUARD 2: bad ratio (<=0 or non-finite) -> skip magnitude adj for this feat (never feed NaN to BA)
+                if (!(ratio>0.0) || !std::isfinite(ratio)){ m=1.0; ++guard_fb; }
+                else {
+                    m = std::pow(ratio, KEEP_MAG_ALPHA);             // dosage: (lbar/G)^alpha
+                    // GUARD 3: pow overflow/NaN -> fallback m=1
+                    if (!std::isfinite(m)){ m=1.0; ++guard_fb; }
+                    else if (m < 1.0/KEEP_MAG_R){ m=1.0/KEEP_MAG_R; ++clamp_lo; }   // gentle clamp [1/R, R]
+                    else if (m > KEEP_MAG_R)    { m=KEEP_MAG_R;     ++clamp_hi; }
+                }
+            }
             // store sqrt(m)*U; applyRel multiplies by base (FOCAL/1.5) -> sqrt_info_inst_ = (FOCAL/1.5)*sqrt(m)*U
             FeatRelInfo fr; fr.sqrt_info=std::sqrt(m)*km_U[k]; fr.valid=true; feat_rel_cur_[km_fid[k]]=fr;
         }
-        ROS_WARN("[reliability-cov keep-mag] feats=%zu G=%.4g clamp_lo=%d clamp_hi=%d trigger=%.2f%% R=%.1f",
-                 km_fid.size(), G, clamp_lo, clamp_hi, 100.0*(clamp_lo+clamp_hi)/(double)km_fid.size(), KEEP_MAG_R);
+        const double nf=(double)km_fid.size();
+        ROS_WARN("[reliability-cov keep-mag] feats=%zu G=%.4g alpha=%.3f R=%.1f clamp_lo=%d clamp_hi=%d trigger=%.2f%% guard_fb=%d guard=%.2f%%",
+                 km_fid.size(), G, KEEP_MAG_ALPHA, KEEP_MAG_R, clamp_lo, clamp_hi,
+                 100.0*(clamp_lo+clamp_hi)/nf, guard_fb, 100.0*guard_fb/nf);
     }
     if (!feat_rel_cur_.empty())
         ROS_INFO("[reliability-cov] feats=%zu aniso(>1.1)=%d mean_ratio=%.2f net=%d",
