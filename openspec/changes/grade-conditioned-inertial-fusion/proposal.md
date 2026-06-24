@@ -1,0 +1,49 @@
+## Why
+
+> **Five anchors (the north star — re-read these at the start of every work session to stay on topic).**
+>
+> **Anchor 1 — one-line positioning.** Grade-conditioned learned visual–inertial rotation arbitration: in GPS-denied dynamic urban scenes, an AI inside the VIO factor graph dynamically arbitrates the *relative* contribution of FOG vs vision to rotation, conditioned on the FOG grade and the scene dynamics.
+>
+> **Anchor 2 — where the AI acts (prevents drifting back to visual covariance).** The AI acts in the **fusion layer** (FOG/IMU factors, NULL loss), **NOT in the visual-feature weighting layer.** The visual-feature weighting path has been shown to be structurally in conflict with the robust kernel (Huber) — it is a dead end (see PAPER_MATERIAL.md). Any design that pulls the AI back to "output a weight / covariance on visual features" violates this spec and is rejected outright.
+>
+> **Anchor 3 — three innovations (prevents building something with no novelty; details in "What Changes").** ① Fusion-layer grade-conditioned rotation arbitration; ② FOG grade × dynamic-scene interaction; ③ discrete multi-grade points proving the AI gain varies with grade.
+>
+> **Anchor 4 — data boundary (prevents over-estimating what is in hand).** Primary data = CARLA (a few discrete FOG grades) + KAIST (real navigation-grade FOG 0.05°/hr, the only real anchor). A physical FOG (0.03°/hr) is used only at the very end for real-vehicle feasibility — it does NOT enter the primary dataset.
+>
+> **Anchor 5 — target venue and bar.** Target Q2 (IEEE Sensors Journal / Measurement / similar). Passing rests on two legs — method novelty (fusion-layer arbitration) and evaluation rigor (anti-cherry-pick discipline) — not a top-venue algorithmic breakthrough. Honest self-assessment: this is a solid systems + methodology paper, not an algorithmic breakthrough.
+
+**Why pivot away from the visual-covariance route.** The previously explored route — learned per-feature anisotropic covariance weighting on *visual* features — is being retired (it is preserved as historical/paper evidence in `openspec/changes/route-c-motion-conditioned-aniso-cov/`, not deleted). The offline and controlled evidence (full detail in PAPER_MATERIAL.md) found that the visual-reliability signal (a) carries 95.7% of its cross-feature variance in an *isotropic* magnitude with near-constant anisotropy; (b) that magnitude mostly **re-encodes geometric constraint strength** (Spearman +0.69 with depth, −0.69 with disparity, +0.36 with track length), overlapping the bundle-adjustment triangulation mechanism it sits on; (c) low-trust features are **not** dynamic objects (spatial clustering ratio ≈ 1.0) but near-range / high-disparity / short-track geometrically-weak points; and (d) a continuous weight is **structurally in conflict with the robust kernel** (`HuberLoss(1.0)` hard threshold) — relaxing the threshold yields chaotic non-monotonic behaviour, removing it diverges. Hence the AI moves to the inertial **fusion** layer, not the visual weighting layer.
+
+**Why the new positioning has real novelty and bypasses Huber.** "Trusting FOG more = trusting vision less" is two sides of one coin: in bundle adjustment all factors compete jointly, so raising the FOG information gives FOG more say on rotation and the relative influence of vision falls out automatically — **without touching the visual factors (which would hit Huber), only by strengthening the FOG side.** Code-path-wise, `HuberLoss(1.0)` acts only on the three visual `ProjectionFactor`s (mono/stereo/marg); the FOG yaw factor and IMU factors are NULL loss. The AI acts on the FOG/IMU side → it never touches Huber. This is a deliberate architectural choice, and the cross-sensor-grade arbitration question is one no prior work has addressed (see RELATED_WORK_DIFF.md).
+
+## What Changes
+
+Three innovations, all conditioned on the AI living in the fusion layer:
+
+- **Innovation 1 (method, the main axis) — fusion-layer grade-conditioned rotation arbitration.** An AI inside the VIO factor graph learns "how much to trust FOG rotation vs visual rotation right now", conditioned on the FOG grade. Contrast FoGNet (Zhao et al.): front-end FOG de-noising, no vision, single fixed grade — structurally unable to do two-source arbitration. We arbitrate *inside* the BA.
+- **Innovation 2 (problem) — cross-sensor-grade AI fusion behaviour, using a few discrete grade points (not a continuous curve).** Per user direction, we deliberately do **not** attempt a continuous curve (too hard, fully simulated, fidelity hard to defend). We use a few representative discrete grade points (general IMU ~10°/hr → mid → navigation-grade ~0.05°/hr aligned to KAIST). The scientific question: as FOG goes from poor to excellent, how does the learned visual–FOG rotation-arbitration strategy change? **Two curves must be kept distinct:** Curve 1 (FOG grade → ATE; hardware; monotonic; certain to hold) vs Curve 2 (FOG grade → *extra AI gain*; direction uncertain; this is itself the finding).
+- **Innovation 3 (scene) — FOG grade × dynamic-scene interaction.** Prior work tests on clean data. Our core scenario is dynamic urban (moving objects corrupt the visual rotation estimate); the AI learns how different FOG grades rescue the corrupted visual rotation in dynamic scenes. The three-way interaction (dynamic × grade × visual-inertial arbitration) is unaddressed.
+
+The AI is moved to the fusion layer; FOG grades use a few discrete points; existing methods are cited with explicit difference statements (RELATED_WORK_DIFF.md). The full anti-cherry-pick evaluation discipline of the prior change (LOSO held-out, do-no-harm gate, win gate, tiered reporting, isolation, provenance) is carried over and re-targeted, and is extended with a **CARLA fidelity calibration** hard requirement and three confirmed-fact hard constraints (see below).
+
+**Three confirmed pits, written as hard constraints (CARLA investigation completed 2026-06-25 — facts are confirmed, do not re-investigate, do not invent numbers):**
+
+- **Pit 1 (most fatal — directly threatens the core argument): grade effect is entangled with visual collapse.** The project's own `V21_300S_GRADE_DIAGNOSIS.md` shows that in the existing grade matrix, the industrial/precision grades "getting worse" is **often the visual scene collapsing by itself (scale collapse), not the IMU grade**: grade↔bad_union Spearman is only 0.705, and military_fog(0.01) ≈ ideal (no degradation). If not isolated, the "grade curve" measures visual collapse, not FOG grade — exactly the reviewer's second knife. **This is the survival-critical core constraint and is written as a spec REQUIRED.** Mitigation (from the diagnosis itself): the grade comparison runs **only under visually-healthy conditions** — primary comparison on the 120 s sequences (6/6 ideal healthy, no collapse), 300 s only as a visually-good-subset corroboration, and grade comparison admitted only when `ideal_imu` is healthy (`est_scale ∈ [0.85, 1.15]`).
+- **Pit 2: the existing grade data is grade-gyro only, no wheel.** The 37G grade matrix has no wheel speed; wheel lives in a separate pipeline (`carla_fwvio`, CSV with wheel + synth FOG). Grade injection and wheel data **must be merged** (wire grade injection into the wheel-carrying pipeline, or add wheel to the grade matrix).
+- **Pit 3: grade injection lives on the replay side of `vins_ws`; the wheel-WS has no player/runner.** `carla_stereo_player` → wheel-WS `vins_node` + a runner must be re-wired, applying the four known `vins_ws` fixes (skip-imu-head 150; R3 extrinsic `[[0,0,1],[0,1,0],[-1,0,0]]`; `proper_yref` axis transform; do not use the old parquet). Solutions recorded in PAPER_MATERIAL.md.
+
+## Capabilities
+
+### New Capabilities
+- `grade-conditioned-inertial-fusion`: a learned, grade-conditioned arbitration of the relative FOG-vs-visual contribution to rotation, acting in the inertial fusion layer (FOG/IMU factors, never the visual weighting layer, never touching Huber), evaluated across a few discrete FOG grades and dynamic scenes, with hard do-no-harm / win gates, LOSO held-out discipline, a visual-collapse-isolation constraint, and a CARLA-fidelity calibration gate.
+
+### Modified Capabilities
+<!-- None: there is no existing spec in openspec/specs/ whose requirements change. The retired visual-covariance route lives in its own change (route-c-motion-conditioned-aniso-cov) and is left untouched as historical evidence. -->
+
+## Impact
+
+- **Estimator (C++):** grade-conditioned arbitration is injected at the **FOG yaw factor / IMU factor** information-weighting point (the fusion layer), with the grade-conditioning input fed in. The deploy path is env-gated / default-OFF so the baseline binary stays bit-identical (Decision 10 isolation discipline carried over). No change to the visual `ProjectionFactor`s and no contact with Huber.
+- **CARLA multi-grade pipeline:** built on the confirmed existing assets — 4 Allan-variance-parameterised grade PROFILES (`carla_dataset_replay_ros2_imu_grade.py`), the 37G `v21_300s_grade_matrix` long sequences, plus a KAIST-alignment point (bias=0.05°/hr) and a general-IMU point (~10°/hr). Pit 2 (wheel merge) and Pit 3 (player/runner re-wire) are engineering tasks scoped in tasks.md.
+- **KAIST real anchor:** the only real navigation-grade FOG (0.05°/hr) — used for the fidelity calibration point and the real-data validation.
+- **No new sensors** in the primary study; a physical FOG (0.03°/hr) is used only for the final real-vehicle feasibility check and does not enter the primary dataset.
+- **Isolation rule (Decision 10, carried over):** any gate / baseline number MUST run with CARLA off and no concurrent load; CARLA is on only while running a CARLA VIO sequence and is shut down before any KAIST gate number is measured.

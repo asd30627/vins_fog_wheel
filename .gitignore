@@ -3,7 +3,12 @@ install/
 log/
 .claude/
 .codex/
-openspec/
+# openspec/ holds spec documents (the version-controlled source of truth), not tooling
+# artifacts. Ignore the openspec/ root (where local tooling files may be generated), but
+# track the spec directories: changes/ and specs/.
+openspec/*
+!openspec/changes/
+!openspec/specs/
 build/
 install/
 log/
