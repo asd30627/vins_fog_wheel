@@ -50,7 +50,10 @@ run_rep(){  # $1=idx $2=rate-tag -> sets RUN_SPAN; returns 0 if full
   [[ "$full" -eq 1 ]] && return 0 || return 1
 }
 
-for i in $(seq 1 "$NREP"); do
+# REP_START (default 1): allows "top-up to N=5" — rerun only reps 4,5 reusing existing rep1-3
+# (adaptive-N escalation). Final raw table below computes over ALL rep dirs 1..NREP.
+REP_START="${REP_START:-1}"
+for i in $(seq "$REP_START" "$NREP"); do
   if ! run_rep "$i" "1p0"; then
     echo "[P1BASE] $SEQ rep${i} truncated/failed at pb1.0 -> retry pb0.5"
     if ! run_rep "$i" "0p5"; then echo "[P1BASE] $SEQ rep${i} STILL not full at pb0.5 -> ABORT"; exit 1; fi
