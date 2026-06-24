@@ -3715,8 +3715,15 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
                 o<<","<<abc[k][0]<<","<<abc[k][1]<<","<<abc[k][2]<<"\n"; }
             ROS_WARN("[reliability-cov] dumped %zu feats to %s", fids.size(), dp); } }
     // reconstruct Lambda_norm -> SHAPE-ONLY U -> feat_rel_cur_
+    // REL_KEEP_MAGNITUDE (env, default OFF): instead of det=1 shape-only U, preserve the net's per-feature
+    // RELATIVE magnitude (sqrt det Lambda), anchored per-window to the FOCAL/1.5 baseline via the geometric
+    // mean of the window's confidence scales -> uses the dominant magnitude signal without raw det~1e8 blowup.
+    // OFF -> the stored U is identical to the shape-only path (gate-binary behavior, bit-identical to 15a57897).
+    static const bool   KEEP_MAG   = [](){ const char* e=std::getenv("REL_KEEP_MAGNITUDE"); return e && std::atoi(e)>0; }();
+    static const double KEEP_MAG_R = [](){ const char* e=std::getenv("REL_KEEP_MAG_CLAMP"); double r=e?std::atof(e):0.0; return r>1.0?r:10.0; }();
     auto softplus=[](double x){ return x>20.0?x:std::log1p(std::exp(x)); };
     int n_aniso=0; double rsum=0;
+    std::vector<int> km_fid; std::vector<Eigen::Matrix2d> km_U; std::vector<double> km_lbar;  // keep-mag deferred
     for (size_t k=0;k<fids.size();++k){
         Eigen::Matrix2d Lam;
         if (ran){ double l11=softplus(abc[k][0])+1e-3, l22=softplus(abc[k][1])+1e-3, l21=abc[k][2];
@@ -3729,8 +3736,25 @@ void Estimator::computeFeatureReliabilityAnisoLearned()
         Eigen::Vector2d u(std::sqrt(l1/lbar), std::sqrt(l2/lbar));
         Eigen::Matrix2d V=es.eigenvectors();
         Eigen::Matrix2d U=V*u.asDiagonal()*V.transpose();   // symmetric SPD, det~1 (shape only)
+        if (KEEP_MAG){ km_fid.push_back(fids[k]); km_U.push_back(U); km_lbar.push_back(lbar);
+                       rsum+=l2/l1; if(l2/l1>1.1) n_aniso++; continue; }
         FeatRelInfo fr; fr.sqrt_info=U; fr.valid=true; feat_rel_cur_[fids[k]]=fr;
         rsum+=l2/l1; if(l2/l1>1.1) n_aniso++;
+    }
+    if (KEEP_MAG && !km_fid.empty()){
+        // per-window geometric mean of the per-feature confidence scale (sqrt det Lambda = lbar)
+        double slog=0; for(double lb: km_lbar) slog+=std::log(std::max(lb,1e-30));
+        const double G=std::exp(slog/(double)km_lbar.size());
+        int clamp_lo=0, clamp_hi=0;
+        for (size_t k=0;k<km_fid.size();++k){
+            double m=km_lbar[k]/G;                                   // relative info magnitude vs window geomean
+            if      (m<1.0/KEEP_MAG_R){ m=1.0/KEEP_MAG_R; ++clamp_lo; }
+            else if (m>KEEP_MAG_R)    { m=KEEP_MAG_R;     ++clamp_hi; }
+            // store sqrt(m)*U; applyRel multiplies by base (FOCAL/1.5) -> sqrt_info_inst_ = (FOCAL/1.5)*sqrt(m)*U
+            FeatRelInfo fr; fr.sqrt_info=std::sqrt(m)*km_U[k]; fr.valid=true; feat_rel_cur_[km_fid[k]]=fr;
+        }
+        ROS_WARN("[reliability-cov keep-mag] feats=%zu G=%.4g clamp_lo=%d clamp_hi=%d trigger=%.2f%% R=%.1f",
+                 km_fid.size(), G, clamp_lo, clamp_hi, 100.0*(clamp_lo+clamp_hi)/(double)km_fid.size(), KEEP_MAG_R);
     }
     if (!feat_rel_cur_.empty())
         ROS_INFO("[reliability-cov] feats=%zu aniso(>1.1)=%d mean_ratio=%.2f net=%d",
