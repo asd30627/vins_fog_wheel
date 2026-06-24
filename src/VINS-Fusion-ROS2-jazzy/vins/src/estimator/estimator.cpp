@@ -2345,7 +2345,13 @@ void Estimator::optimization()
     ceres::Problem problem;
     ceres::LossFunction *loss_function;
     //loss_function = NULL;
-    loss_function = new ceres::HuberLoss(1.0);
+    // REL_HUBER_DELTA (env, default 1.0): visual-factor Huber delta knob. >0 -> HuberLoss(delta);
+    // <=0 -> NULL (no robust loss). Default 1.0 == HuberLoss(1.0) -> bit-identical to gate binary 15a57897.
+    // DIAGNOSTIC for the keep-mag alpha non-monotonicity hypothesis (is the delta=1.0 hard outlier
+    // threshold the chaos source? widen delta / remove robust and re-run the alpha sweep).
+    static const double REL_HUBER_DELTA = [](){ const char* e=std::getenv("REL_HUBER_DELTA"); return e?std::atof(e):1.0; }();
+    loss_function = (REL_HUBER_DELTA > 0.0) ? static_cast<ceres::LossFunction*>(new ceres::HuberLoss(REL_HUBER_DELTA))
+                                            : static_cast<ceres::LossFunction*>(NULL);
     //loss_function = new ceres::CauchyLoss(1.0 / FOCAL_LENGTH);
     //ceres::LossFunction* loss_function = new ceres::HuberLoss(1.0);
 
