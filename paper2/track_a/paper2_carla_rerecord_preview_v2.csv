@@ -1,0 +1,3 @@
+run,setting,npc_mode,requested,spawned,spawn_ratio,autopilot_delay,run_kind,drive_frames,frames,gt_obj_per_f,rng_med,rng_p10,rng_p90,pct_lt30,pct_lt50,pct_gt150,infov_per_f,infov_lt50_per_f,det_total,matched,matched_lt50,det_per_f,bbox_med,fullframe_ratio,tracks,class,reason
+Town06__dynamic_v3fix__rundense_near_preview,Town06/dense_near_hybrid,dynamic_near_route,20,73,3.65,True,preview,100,260,74.0,354.4,36.1,585.2,7.9,16.2,70.3,57.0,1.0,1497,1497,1358,5.76,2363.5,0.0,17,PASS_PREVIEW,near-object yield ok (matched<50m=1358)
+Town07__dynamic_v3fix__rundense_near_preview,Town07/dense_near_hybrid,dynamic_near_route,20,71,3.55,True,preview,100,260,72.0,88.4,27.3,205.8,13.6,25.2,30.2,17.83,12.83,198,194,44,1.02,91.7,0.0,5,PASS_PREVIEW,near-object yield ok (matched<50m=44)

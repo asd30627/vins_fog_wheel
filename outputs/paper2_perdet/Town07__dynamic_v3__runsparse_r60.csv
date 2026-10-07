@@ -1,0 +1,6 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town07,sparse,sparse_r60,367,-1,car,0.428,13.5,9.4,1.438,127.3,0.0,480.8,238.6,1.375,0.323,116.364,130.223,26.675,,0,116.364,58.46,,1,121.971,vehicle.carlamotors.european_hgv,8.255,5.231,,,30m+
+Town07,sparse,sparse_r60,483,-1,person,0.359,16.9,54.2,0.313,917.2,0.003,626.2,361.0,43.0,5.921,3.721,5.15,43.738,17.063,116,3.721,3.561,18.126,0,,,,,,,0-15m
+Town07,sparse,sparse_r60,658,-1,person,0.679,14.6,49.7,0.293,724.7,0.002,632.5,329.3,31.812,13.99,5.029,7.03,44.318,0.58,291,5.029,4.911,4.313,1,156.704,vehicle.harley-davidson.low_rider,149.685,10.746,6.433,62.724,30m+
+Town07,sparse,sparse_r60,691,-1,person,0.582,21.2,105.1,0.202,2231.2,0.007,629.1,310.6,39.188,8.989,4.083,5.677,44.008,-0.309,324,4.083,3.944,3.636,0,,,,,,,0-15m
+Town07,sparse,sparse_r60,709,-1,person,0.403,27.8,51.9,0.536,1443.2,0.005,541.3,314.8,33.562,0.909,4.767,5.796,34.665,-9.343,342,4.767,3.297,4.975,0,,,,,,,0-15m

@@ -1,0 +1,15 @@
+grade,variant,rep,ate_rmse,rpe_trans,n_vio
+ideal_imu,baseline,1,2.823,0.2171,520
+ideal_imu,all_object,1,2.784,0.1846,520
+ideal_imu,random_ctrl,1,3.156,0.2532,520
+ideal_imu,baseline,2,2.823,0.2171,520
+ideal_imu,all_object,2,2.784,0.1846,520
+ideal_imu,random_ctrl,2,2.826,0.2164,520
+ideal_imu,baseline,3,2.823,0.2171,520
+ideal_imu,all_object,3,2.784,0.1846,520
+ideal_imu,random_ctrl,3,2.826,0.2164,520
+industrial_fog,baseline,1,2.863,0.2454,520
+industrial_fog,all_object,1,2.455,0.1839,520
+industrial_fog,random_ctrl,1,2.867,0.2451,520
+industrial_fog,baseline,2,2.863,0.2454,520
+industrial_fog,all_object,2,2.408,0.1816,520

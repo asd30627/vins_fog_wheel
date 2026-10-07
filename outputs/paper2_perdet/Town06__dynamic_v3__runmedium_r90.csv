@@ -1,0 +1,4 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town06,medium,medium_r90,193,7,person,0.401,28.2,15.5,1.814,437.8,0.001,261.5,122.1,6.0,0.026,26.667,27.109,-10.362,,0,26.667,-4.876,,0,,,,,,,15-30m
+Town06,medium,medium_r90,615,-1,person,0.407,26.4,35.2,0.75,928.6,0.003,290.8,205.8,1.0,0.263,160.0,160.666,-5.218,,0,160.0,-14.611,,0,,,,,,,30m+
+Town06,medium,medium_r90,626,-1,person,0.381,27.5,35.7,0.771,982.2,0.003,290.3,203.9,1.0,0.289,160.0,160.688,-5.302,-0.085,11,160.0,-14.849,4.182,0,,,,,,,30m+

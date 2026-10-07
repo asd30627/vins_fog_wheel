@@ -1,0 +1,2 @@
+policy,high_cost_msgs,high_cost_true,cmd2_msgs,stopped_on_risk,moved_on_risk,moved_when_safe,stopped_when_safe,gate_1_6_pass
+carla_replay,384,374,2364,2238,0,0,126,0

@@ -1,0 +1,6 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town01,sparse,sparse_r90,154,-1,person,0.385,33.5,212.2,0.158,7111.7,0.023,16.9,107.1,,,,,,,0,,,,0,,,,,,,
+Town01,sparse,sparse_r90,326,-1,truck,0.434,44.4,58.2,0.763,2587.7,0.008,22.4,262.2,,,,,,,172,,,,0,,,,,,,
+Town01,sparse,sparse_r90,333,-1,bus,0.364,74.5,51.9,1.435,3863.6,0.013,86.7,257.8,,,,,,,179,,,,0,,,,,,,
+Town01,sparse,sparse_r90,353,-1,car,0.387,22.7,73.1,0.31,1656.1,0.005,11.5,264.6,,,,,,,199,,,,0,,,,,,,
+Town01,sparse,sparse_r90,512,-1,car,0.37,20.2,16.9,1.194,341.3,0.001,618.3,279.8,31.0,0.0,5.161,7.056,42.986,,358,5.161,4.811,,0,,,,,,,0-15m

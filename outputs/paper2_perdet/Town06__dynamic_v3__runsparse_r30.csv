@@ -1,0 +1,1 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin

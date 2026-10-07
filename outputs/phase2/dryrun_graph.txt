@@ -1,0 +1,61 @@
+==== NODE LIST ====
+/behavior_server
+/bt_navigator
+/bt_navigator_navigate_through_poses_rclcpp_node
+/bt_navigator_navigate_to_pose_rclcpp_node
+/collision_monitor
+/controller_server
+/docking_server
+/global_costmap/global_costmap
+/goal_repeater
+/lifecycle_manager_navigation
+/local_costmap/local_costmap
+/minimal_source
+/nav2_rviz_docking_panel_node
+/nav2_rviz_selector_node
+/object_scan_synth
+/odom_bridge
+/path_cost_monitor_node
+/planner_server
+/risk_behavior_logger
+/route_server
+/rviz
+/rviz_navigation_dialog_action_client
+/scan_fix_node
+/smoother_server
+/transform_listener_impl_56e72e9cc9e0
+/transform_listener_impl_5bc601a49a20
+/transform_listener_impl_5bc6022c8930
+/transform_listener_impl_6313033ce740
+/twist_servo
+/validity_publisher
+/validity_to_nav_adapter
+/velocity_smoother
+/wavefront_frontier
+/waypoint_follower
+==== ACTUAL DATA FLOW (ros2 topic hz, robust vs discovery race) ====
+--- /map ---
+(no msgs in 4s)
+--- /odom ---
+average rate: 29.998
+--- /scan ---
+average rate: 10.000
+--- /object_validity ---
+average rate: 5.000
+--- /paper2/frontier_risk_cost ---
+(no msgs in 4s)
+--- /path_cost_monitor/high_cost ---
+average rate: 4.999
+--- /cmd_vel_2 ---
+average rate: 29.999
+==== /object_validity sample (REAL labels) ====
+{"stamp":33.3,"frame_id":"odom","objects":[{"id":17,"validity_class":"unobservable","position":[2.539,1.192,0.0],"velocity":[0.0,0.0,0.0],"velocity_valid":false,"confidence":0.935,"range_m":2.805,"source_type":""},{"id":363,"validity_class":"unobservable","position":[9.482,8.458,0.0],"velocity":[0.0,0.0,0.0],"velocity_valid":false,"confidence":0.805,"range_m":12.706,"source_type":""},{"id":385,"validity_class":"unobservable","position":[13.545,8.485,0.0],"velocity":[0.0,0.0,0.0],"velocity_valid":false,"confidence":0.787,"range_m":15.983,"source_type":""},{"id":350,"validity_class":"unobservable","position":[2.756,1.738,0.0],"velocity":[0.0,0.0,0.0],"velocity_valid":false,"confidence":0.397,"range_m":3.258,"source_type":""}]}
+---
+==== /paper2/frontier_risk_cost sample ====
+0.8999999761581421
+---
+==== high_cost rate (5s) ====
+      5 False
+     17 True
+==== nodes alive at end? (crash check) ====
+4

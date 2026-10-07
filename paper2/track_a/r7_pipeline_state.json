@@ -1,0 +1,350 @@
+{
+  "previews": {
+    "Town01__medium_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town01__dynamic_v3r7__runmedium_near_r7_preview",
+      "quality": "LOW_YIELD_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 3,
+        "n_det": 3,
+        "det_per_frame": 1.0,
+        "n_matched": 3,
+        "n_matched50": 3,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town01__dynamic_v3r7__runmedium_near_r7_preview.csv"
+      }
+    },
+    "Town01__dense_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town01__dynamic_v3r7__rundense_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 57,
+        "n_det": 58,
+        "det_per_frame": 1.018,
+        "n_matched": 57,
+        "n_matched50": 57,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town01__dynamic_v3r7__rundense_near_r7_preview.csv"
+      }
+    },
+    "Town01__dense_slow_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town01__dynamic_v3r7__rundense_slow_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 85,
+        "n_det": 144,
+        "det_per_frame": 1.694,
+        "n_matched": 144,
+        "n_matched50": 144,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town01__dynamic_v3r7__rundense_slow_r7_preview.csv"
+      }
+    },
+    "Town02__medium_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town02__dynamic_v3r7__runmedium_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 249,
+        "n_det": 282,
+        "det_per_frame": 1.133,
+        "n_matched": 270,
+        "n_matched50": 270,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town02__dynamic_v3r7__runmedium_near_r7_preview.csv"
+      }
+    },
+    "Town02__dense_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town02__dynamic_v3r7__rundense_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 594,
+        "det_per_frame": 2.285,
+        "n_matched": 585,
+        "n_matched50": 585,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town02__dynamic_v3r7__rundense_near_r7_preview.csv"
+      }
+    },
+    "Town02__dense_slow_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town02__dynamic_v3r7__rundense_slow_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.8,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 592,
+        "det_per_frame": 2.277,
+        "n_matched": 570,
+        "n_matched50": 570,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town02__dynamic_v3r7__rundense_slow_r7_preview.csv"
+      }
+    },
+    "Town04__medium_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town04__dynamic_v3r7__runmedium_near_r7_preview",
+      "quality": "LOW_YIELD_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 179,
+        "n_det": 184,
+        "det_per_frame": 1.028,
+        "n_matched": 11,
+        "n_matched50": 11,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town04__dynamic_v3r7__runmedium_near_r7_preview.csv"
+      }
+    },
+    "Town04__dense_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town04__dynamic_v3r7__rundense_near_r7_preview",
+      "quality": "LOW_YIELD_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 213,
+        "n_det": 353,
+        "det_per_frame": 1.657,
+        "n_matched": 0,
+        "n_matched50": 0,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town04__dynamic_v3r7__rundense_near_r7_preview.csv"
+      }
+    },
+    "Town04__dense_slow_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town04__dynamic_v3r7__rundense_slow_r7_preview",
+      "quality": "LOW_YIELD_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 139,
+        "n_det": 139,
+        "det_per_frame": 1.0,
+        "n_matched": 0,
+        "n_matched50": 0,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town04__dynamic_v3r7__rundense_slow_r7_preview.csv"
+      }
+    },
+    "Town05__medium_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town05__dynamic_v3r7__runmedium_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 1659,
+        "det_per_frame": 6.381,
+        "n_matched": 1144,
+        "n_matched50": 1144,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town05__dynamic_v3r7__runmedium_near_r7_preview.csv"
+      }
+    },
+    "Town05__dense_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town05__dynamic_v3r7__rundense_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 1890,
+        "det_per_frame": 7.269,
+        "n_matched": 1464,
+        "n_matched50": 1464,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town05__dynamic_v3r7__rundense_near_r7_preview.csv"
+      }
+    },
+    "Town05__dense_slow_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town05__dynamic_v3r7__rundense_slow_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 2033,
+        "det_per_frame": 7.819,
+        "n_matched": 1648,
+        "n_matched50": 1648,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town05__dynamic_v3r7__rundense_slow_r7_preview.csv"
+      }
+    },
+    "Town10HD__medium_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town10HD__dynamic_v3r7__runmedium_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 246,
+        "n_det": 510,
+        "det_per_frame": 2.073,
+        "n_matched": 218,
+        "n_matched50": 218,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town10HD__dynamic_v3r7__runmedium_near_r7_preview.csv"
+      }
+    },
+    "Town10HD__dense_near_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town10HD__dynamic_v3r7__rundense_near_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 255,
+        "n_det": 914,
+        "det_per_frame": 3.584,
+        "n_matched": 740,
+        "n_matched50": 740,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town10HD__dynamic_v3r7__rundense_near_r7_preview.csv"
+      }
+    },
+    "Town10HD__dense_slow_r7_preview": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town10HD__dynamic_v3r7__rundense_slow_r7_preview",
+      "quality": "PASS_PREVIEW",
+      "ego_path": 21.9,
+      "metrics": {
+        "n_frames": 260,
+        "n_det": 1265,
+        "det_per_frame": 4.865,
+        "n_matched": 1073,
+        "n_matched50": 1073,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town10HD__dynamic_v3r7__rundense_slow_r7_preview.csv"
+      }
+    }
+  },
+  "cores": {
+    "Town01__dense_slow_r7_core": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town01__dynamic_v3r7__rundense_slow_r7_core",
+      "quality": "PASS_CORE_R7",
+      "ego_path": 150.9,
+      "metrics": {
+        "n_frames": 378,
+        "n_det": 478,
+        "det_per_frame": 1.265,
+        "n_matched": 470,
+        "n_matched50": 470,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town01__dynamic_v3r7__rundense_slow_r7_core.csv"
+      }
+    },
+    "Town02__dense_near_r7_core": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town02__dynamic_v3r7__rundense_near_r7_core",
+      "quality": "PASS_CORE_R7",
+      "ego_path": 150.8,
+      "metrics": {
+        "n_frames": 575,
+        "n_det": 1106,
+        "det_per_frame": 1.923,
+        "n_matched": 1065,
+        "n_matched50": 1065,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town02__dynamic_v3r7__rundense_near_r7_core.csv"
+      }
+    },
+    "Town05__dense_slow_r7_core": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town05__dynamic_v3r7__rundense_slow_r7_core",
+      "quality": "PASS_CORE_R7",
+      "ego_path": 101.9,
+      "metrics": {
+        "n_frames": 880,
+        "n_det": 3617,
+        "det_per_frame": 4.11,
+        "n_matched": 3100,
+        "n_matched50": 3100,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town05__dynamic_v3r7__rundense_slow_r7_core.csv"
+      }
+    },
+    "Town10HD__dense_slow_r7_core": {
+      "status": "recorded",
+      "rec": "/mnt/sata4t/datasets/carla_fwvio/Town10HD__dynamic_v3r7__rundense_slow_r7_core",
+      "quality": "PASS_CORE_R7",
+      "ego_path": 150.8,
+      "metrics": {
+        "n_frames": 880,
+        "n_det": 3092,
+        "det_per_frame": 3.514,
+        "n_matched": 2587,
+        "n_matched50": 2587,
+        "fullframe_count": 0,
+        "fullframe_ratio": 0.0,
+        "perdet_csv": "/home/ivlab3/fwvio_estimator_ws_wheel/outputs/paper2_perdet/Town10HD__dynamic_v3r7__rundense_slow_r7_core.csv"
+      }
+    }
+  },
+  "vins_smoke": {
+    "Town01__dense_slow_r7_core": {
+      "class": "VINS_READY_R7",
+      "ates": [
+        34.187,
+        34.187
+      ]
+    },
+    "Town02__dense_near_r7_core": {
+      "class": "VINS_READY_R7",
+      "ates": [
+        34.226,
+        34.226
+      ]
+    },
+    "Town05__dense_slow_r7_core": {
+      "class": "VINS_READY_R7",
+      "ates": [
+        41.532,
+        41.532
+      ]
+    },
+    "Town10HD__dense_slow_r7_core": {
+      "class": "VINS_READY_R7",
+      "ates": [
+        35.03,
+        34.3
+      ]
+    }
+  },
+  "vision": {
+    "Town01|ideal_imu": "VISION_INERT",
+    "Town01|industrial_fog": "VISION_INERT",
+    "Town02|ideal_imu": "VISION_INERT",
+    "Town02|industrial_fog": "VISION_INERT",
+    "Town05|ideal_imu": "VISION_INERT",
+    "Town05|industrial_fog": "VISION_INERT",
+    "Town10HD|ideal_imu": "VISION_INERT",
+    "Town10HD|industrial_fog": "VISION_INERT"
+  }
+}

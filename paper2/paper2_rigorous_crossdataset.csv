@@ -1,0 +1,5 @@
+scenario,model,n_test,auroc,auroc_lo,auroc_hi,overconf,retention,false_refusal
+CARLA->KITTI,distance_gate,37022,0.713,0.688,0.7354,0.3815,0.6344,0.3656
+CARLA->KITTI,OVI_geom,37022,0.7106,0.6835,0.7332,0.3899,0.6317,0.3683
+CARLA->KITTI,selective_logistic,37022,0.7473,0.7184,0.7685,0.3807,0.697,0.303
+CARLA->KITTI,selective_hist_gbm,37022,0.7155,0.6789,0.7552,0.4186,0.5444,0.4556

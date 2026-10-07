@@ -1,0 +1,3 @@
+variant,run,routing,huber,ATE_se3_m,early_scale,late_scale,full_scale,vio_rows,vins_fail,mean_outlier_ratio,mean_mgr_feat,note
+V1,Town01_dense_b1,none,on,3.35,1.015,0.511,0.892,268,0,0.5175,52.4,stock reproduce baseline (bit-identical to base3)
+V2,Town01_dense_b1,none,off,2.86,1.003,0.475,0.867,269,0,0.5054,52.2,Huber OFF via REL_VISUAL_ROBUST_LOSS=0; NO divergence

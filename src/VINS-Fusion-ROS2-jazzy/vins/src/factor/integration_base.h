@@ -280,6 +280,10 @@ class IntegrationBase
     Eigen::Matrix<double, 18, 18> noise;
 
     double sum_dt;
+    double oracle_cov_scale = 1.0;   // (legacy scalar oracle; unused by the 15-dim version)
+    // IMU-COV-ORACLE (15-dim ideal): per-dim ideal VARIANCE from GT-evaluated residual. -1 = OFF (stock cov).
+    // imu_factor.h inflates: cov_used(k,k) = max(cov_used(k,k), oracle_cov_diag(k)).
+    Eigen::Matrix<double, 15, 1> oracle_cov_diag = Eigen::Matrix<double, 15, 1>::Constant(-1.0);
     Eigen::Vector3d delta_p;
     Eigen::Quaterniond delta_q;
     Eigen::Vector3d delta_v;

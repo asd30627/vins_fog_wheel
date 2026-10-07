@@ -1,0 +1,2 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town01,dense_near,dense_near_preview2,217,-1,truck,0.579,67.6,100.0,0.676,6765.1,0.007,1245.7,359.8,15.125,4.194,21.157,29.13,43.424,,0,21.157,20.024,,0,,,,,,,15-30m

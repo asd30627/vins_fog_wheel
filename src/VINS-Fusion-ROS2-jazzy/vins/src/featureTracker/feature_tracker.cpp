@@ -450,10 +450,21 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     for(size_t i = 0; i < cur_pts.size(); i++)
         prevLeftPtsMap[ids[i]] = cur_pts[i];
 
+    // REL_FEATURE_DROPOUT (env, default 0): deterministic vision-sensitivity probe. Fraction in [0,1] of
+    // tracked features to DROP from the estimator input, chosen by feature_id hash (same id dropped in
+    // left+right, and stably across frames). ABLATION/DIAGNOSTIC ONLY — not a method. Deterministic.
+    static const int REL_FEAT_DROP_PPT = [](){ const char* e=std::getenv("REL_FEATURE_DROPOUT");
+        double f = e ? std::atof(e) : 0.0; if (f<0) f=0; if (f>1) f=1; return (int)(f*1000.0 + 0.5); }();
+    auto feat_dropped = [](int fid)->bool {
+        if (REL_FEAT_DROP_PPT <= 0) return false;
+        unsigned int h = (unsigned int)fid * 2654435761u;   // Knuth multiplicative hash
+        return (int)(h % 1000u) < REL_FEAT_DROP_PPT;
+    };
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     for (size_t i = 0; i < ids.size(); i++)
     {
         int feature_id = ids[i];
+        if (feat_dropped(feature_id)) continue;
         double x, y ,z;
         x = cur_un_pts[i].x;
         y = cur_un_pts[i].y;
@@ -476,6 +487,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         for (size_t i = 0; i < ids_right.size(); i++)
         {
             int feature_id = ids_right[i];
+            if (feat_dropped(feature_id)) continue;   // REL_FEATURE_DROPOUT: same id dropped in both cams
             double x, y ,z;
             x = cur_un_right_pts[i].x;
             y = cur_un_right_pts[i].y;

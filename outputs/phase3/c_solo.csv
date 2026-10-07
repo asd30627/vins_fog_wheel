@@ -1,0 +1,2 @@
+policy,success,time_to_goal_s,elapsed_s,path_length_m,final_dist_to_goal_m,min_obstacle_clearance_m,collisions,near_collisions,goal_sent,ego_x,ego_y
+unknown,0,,4.0,2.364,6.651,0.965,0,0,0,2.35,-0.11

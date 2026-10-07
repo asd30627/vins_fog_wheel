@@ -1,0 +1,7 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town01,sparse,sparse_b1,203,-1,person,0.486,13.4,19.2,0.696,257.0,0.001,367.6,244.3,3.875,0.547,41.29,41.745,8.462,,0,41.29,6.143,,0,,,,,,,30m+
+Town01,sparse,sparse_b1,237,30,person,0.369,12.5,27.7,0.45,346.0,0.001,392.3,243.3,5.0,1.666,32.0,32.806,12.724,,0,32.0,7.226,,0,,,,,,,30m+
+Town01,sparse,sparse_b1,240,30,person,0.397,12.8,28.4,0.45,364.2,0.001,394.9,243.6,5.812,1.746,27.527,28.27,13.17,0.446,3,27.527,6.441,26.23,0,,,,,,,15-30m
+Town01,sparse,sparse_b1,242,30,person,0.615,13.1,28.9,0.453,378.1,0.001,396.3,243.4,5.875,1.754,27.234,27.997,13.406,0.236,5,27.234,6.491,1.273,0,,,,,,,15-30m
+Town01,sparse,sparse_b1,247,30,person,0.567,12.3,26.8,0.458,330.0,0.001,400.4,244.9,5.688,1.174,28.132,29.005,14.097,0.691,10,28.132,7.065,8.036,0,,,,,,,15-30m
+Town01,sparse,sparse_b1,417,-1,car,0.502,12.7,21.6,0.586,273.0,0.001,6.6,287.5,,,,,,,214,,,,0,,,,,,,

@@ -1,0 +1,29 @@
+{
+  "model_version": "TCSV-M(mono)_hgbm_v1_leaveRunOut",
+  "n_train": 21381,
+  "n_score": 2186,
+  "targets": [
+    "Town01/dense_b1",
+    "Town01/medium_b1"
+  ],
+  "policy_counts": {
+    "dense_b1": {
+      "reject_high_dynamic": 865,
+      "keep_position_lower_weight": 198,
+      "suppress_full_state_low": 59,
+      "soft_uncertain": 51,
+      "keep_static_reliable": 7
+    },
+    "medium_b1": {
+      "reject_high_dynamic": 585,
+      "keep_position_lower_weight": 337,
+      "suppress_full_state_low": 53,
+      "soft_uncertain": 30,
+      "keep_static_reliable": 1
+    }
+  },
+  "weight_mean_by_run": {
+    "dense_b1": 0.13139830508474576,
+    "medium_b1": 0.22181908548707752
+  }
+}

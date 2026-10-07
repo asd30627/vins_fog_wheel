@@ -1,0 +1,21 @@
+seq             grade            crash completed vio_rows scale_collapse%  n_win
+urban28-pankyo  kaist_real_005      no       yes    19735             0.7    281
+urban28-pankyo  industrial_fog      no       yes    19735             1.1    281
+urban28-pankyo  precision_mems      no       yes    19735             1.4    281
+urban28-pankyo  general_imu         no       yes    19735             0.7    281
+
+urban29-pankyo  kaist_real_005      no       yes     4426             1.5     66
+urban29-pankyo  industrial_fog      no       yes     4426             1.5     66
+urban29-pankyo  precision_mems      no       yes     4426             1.5     66
+urban29-pankyo  general_imu        YES        NO       14              NA      0
+
+urban26-dongtan kaist_real_005      no       yes     5827             1.2     83
+urban26-dongtan industrial_fog      no       yes     5827             1.2     83
+urban26-dongtan precision_mems      no       yes     5827             1.2     83
+urban26-dongtan general_imu         no       yes     5827             1.2     83
+
+urban27-dongtan kaist_real_005      no       yes    11591             2.3    130
+urban27-dongtan industrial_fog      no       yes    11591             2.3    130
+urban27-dongtan precision_mems      no       yes    11591             1.5    130
+urban27-dongtan general_imu         no       yes    11591             2.3    130
+

@@ -1,0 +1,13 @@
+split,comparison,dAURC_mean,ci_lo,ci_hi,verdict
+CARLA->CARLA,seq_pool_hgbm vs TCSV-HistGBM-bal,-0.0225,-0.0509,0.0018,tie
+CARLA->CARLA,seq_pool_hgbm vs cv_gate,-0.1107,-0.1404,-0.0799,cand_better
+CARLA->CARLA,TCSV-HistGBM-bal vs cv_gate,-0.0882,-0.126,-0.0596,cand_better
+KITTI->KITTI,seq_pool_hgbm vs TCSV-HistGBM-bal,-0.0107,-0.0175,-0.0078,cand_better
+KITTI->KITTI,seq_pool_hgbm vs cv_gate,-0.09,-0.1215,-0.0733,cand_better
+KITTI->KITTI,TCSV-HistGBM-bal vs cv_gate,-0.0793,-0.1067,-0.0655,cand_better
+C+Ktr->Khold,seq_pool_hgbm vs TCSV-HistGBM-bal,-0.0057,-0.0094,-0.0032,cand_better
+C+Ktr->Khold,seq_pool_hgbm vs cv_gate,-0.0828,-0.1171,-0.0636,cand_better
+C+Ktr->Khold,TCSV-HistGBM-bal vs cv_gate,-0.0772,-0.1084,-0.0604,cand_better
+K+Ctr->Chold,seq_pool_hgbm vs TCSV-HistGBM-bal,0.0055,-0.0065,0.0313,tie
+K+Ctr->Chold,seq_pool_hgbm vs cv_gate,-0.067,-0.1019,-0.0333,cand_better
+K+Ctr->Chold,TCSV-HistGBM-bal vs cv_gate,-0.0725,-0.1097,-0.0365,cand_better

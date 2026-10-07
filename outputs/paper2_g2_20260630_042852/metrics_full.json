@@ -1,0 +1,83 @@
+{
+ "distance_only": {
+  "rmse": 47.40357812914721,
+  "med_abs": 2.4745000451803207,
+  "p95_abs": 105.90409822463988,
+  "nll": 5.241400576646228,
+  "calib_err": 0.08679511096815695,
+  "auroc_high": 0.4664160972597273,
+  "riskcov_err80": 27.663935879879762,
+  "overconf_wrong": 0.39568801521876984
+ },
+ "geometry_gate": {
+  "rmse": 47.40518750676678,
+  "med_abs": 4.052300049591064,
+  "p95_abs": 105.85907026855469,
+  "nll": 584.154055016585,
+  "calib_err": 0.1481164361531039,
+  "auroc_high": 0.49383455217047934,
+  "riskcov_err80": 31.010093422316853,
+  "overconf_wrong": 0.5637285986049461
+ },
+ "noue_object": {
+  "rmse": 44.198238372802734,
+  "med_abs": 5.006814002990723,
+  "p95_abs": 101.82246398925781,
+  "nll": 20.522308349609375,
+  "calib_err": 0.13587841749758764,
+  "auroc_high": 0.621993953552288,
+  "riskcov_err80": 24.103185653686523,
+  "overconf_wrong": 0.45339251743817377
+ },
+ "noue_object_perbin": {
+  "0-15m": {
+   "rmse": 51.98460388183594,
+   "med_abs": 8.13095474243164,
+   "p95_abs": 98.37982940673828,
+   "nll": 13.99380874633789,
+   "calib_err": 0.1421188118811881,
+   "auroc_high": 0.7477832668313382,
+   "riskcov_err80": 29.51350212097168,
+   "overconf_wrong": 0.3483754512635379
+  },
+  "15-30m": {
+   "rmse": 48.67214584350586,
+   "med_abs": 4.759151458740234,
+   "p95_abs": 104.62157440185547,
+   "nll": 35.02035140991211,
+   "calib_err": 0.1555942028985507,
+   "auroc_high": 0.39265184237188716,
+   "riskcov_err80": 30.296751022338867,
+   "overconf_wrong": 0.6190476190476191
+  },
+  "30m+": {
+   "rmse": 27.06046485900879,
+   "med_abs": 4.99735164642334,
+   "p95_abs": 70.76936340332031,
+   "nll": 11.062962532043457,
+   "calib_err": 0.10766834170854274,
+   "auroc_high": 0.6745455802059576,
+   "riskcov_err80": 13.203142166137695,
+   "overconf_wrong": 0.38461538461538464
+  }
+ },
+ "heads_auroc": {
+  "invalid_velocity": 0.6548102963698192,
+  "observability": 0.7588707504983567,
+  "utility": 0.6504710599342294
+ },
+ "h1_residual_refine": {
+  "rmse": 45.566558837890625,
+  "med_abs": 4.515078544616699,
+  "p95_abs": 103.21619415283203,
+  "nll": 5.2955708503723145,
+  "calib_err": 0.11439240913477003,
+  "auroc_high": 0.5,
+  "riskcov_err80": 26.45013999938965,
+  "overconf_wrong": 0.0
+ },
+ "A2_with_vins_quality": {
+  "status": "BLOCKED",
+  "reason": "no reliability_features_vins.csv for these CARLA recordings (needs VINS replay); per G0 spec, VINS-conditioned marked blocked, not fabricated"
+ }
+}

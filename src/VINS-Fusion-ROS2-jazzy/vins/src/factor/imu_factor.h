@@ -83,6 +83,13 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
         Eigen::Matrix<double, 15, 15> cov_used = pre_integration->covariance;
         if (DBG_IMU_COV_FLOOR > 0.0)
             cov_used += DBG_IMU_COV_FLOOR * Eigen::Matrix<double, 15, 15>::Identity();
+        // IMU-COV-ORACLE (15-dim ideal): inflate each covariance diagonal to the GT-evaluated residual variance
+        // when that exceeds the stock value (downweight-only, per dimension). oracle_cov_diag(0) < 0 => OFF (stock).
+        // Set externally (estimator) from pre_integration->evaluate() at GT poses+velocities. OPTIMISTIC (GT circular).
+        if (pre_integration->oracle_cov_diag(0) >= 0.0)
+            for (int k = 0; k < 15; ++k)
+                if (pre_integration->oracle_cov_diag(k) > cov_used(k, k))
+                    cov_used(k, k) = pre_integration->oracle_cov_diag(k);
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(cov_used.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();
         residual = sqrt_info * residual;

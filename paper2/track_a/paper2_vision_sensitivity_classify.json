@@ -1,0 +1,22 @@
+{
+  "ideal_imu|dense_b1": [
+    "VISION_ACTIVE",
+    13.89,
+    27.01
+  ],
+  "ideal_imu|medium_b1": [
+    "VISION_ACTIVE",
+    0.89,
+    16.28
+  ],
+  "industrial_fog|dense_b1": [
+    "VISION_ACTIVE",
+    14.25,
+    25.06
+  ],
+  "industrial_fog|medium_b1": [
+    "VISION_ACTIVE",
+    2.03,
+    12.61
+  ]
+}

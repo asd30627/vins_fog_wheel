@@ -1,0 +1,7 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town07,dense,dense_r30,0,1,car,0.57,23.8,12.0,1.98,285.0,0.001,380.2,245.9,3.562,0.425,44.912,45.701,10.661,,0,44.912,8.455,,1,45.38,vehicle.mini.cooper_s_2021,0.366,6.008,,,30m+
+Town07,dense,dense_r30,1,1,car,0.532,23.7,12.0,1.979,283.7,0.001,381.2,245.8,3.5,0.438,45.714,46.543,10.83,0.169,1,45.714,8.745,17.059,1,45.637,vehicle.mini.cooper_s_2021,0.936,6.657,10.402,28.699,30m+
+Town07,dense,dense_r30,2,1,car,0.497,22.8,11.6,1.975,264.1,0.001,382.1,246.0,3.812,0.446,41.967,42.75,10.981,0.151,2,41.967,8.143,75.902,1,45.91,vehicle.mini.cooper_s_2021,3.175,6.933,68.969,140.208,30m+
+Town07,dense,dense_r30,31,-1,car,0.398,29.5,9.3,3.177,273.3,0.001,443.3,245.4,4.75,0.459,33.684,36.1,21.078,,0,33.684,12.983,,1,53.823,vehicle.mini.cooper_s_2021,17.724,8.036,,,30m+
+Town07,dense,dense_r30,32,2,car,0.405,29.1,9.2,3.178,266.3,0.001,446.3,245.5,4.688,0.373,34.133,36.695,21.536,,0,34.133,13.47,,1,54.038,vehicle.mini.cooper_s_2021,17.345,7.977,,,30m+
+Town07,dense,dense_r30,50,-1,car,0.45,26.0,11.7,2.228,304.6,0.001,488.1,243.2,7.688,0.816,20.813,23.51,27.715,6.637,19,20.813,10.934,13.719,1,57.649,vehicle.mini.cooper_s_2021,34.139,7.99,5.729,101.195,30m+

@@ -1,0 +1,17 @@
+seq             grade                n corrFOG corrVIS  errFOGmed  errVISmed FOGwins%
+urban28-pankyo  kaist_real_005   19734   1.000   0.999     0.0000     0.0001     71.3
+urban28-pankyo  industrial_fog   19734   1.000   0.999     0.0000     0.0001     71.3
+urban28-pankyo  precision_mems   19734   1.000   0.999     0.0000     0.0001     68.2
+urban28-pankyo  general_imu      19734   1.000   0.999     0.0000     0.0001     63.5
+urban29-pankyo  kaist_real_005    4425   1.000   0.999     0.0000     0.0001     74.0
+urban29-pankyo  industrial_fog    4425   1.000   0.999     0.0000     0.0001     73.6
+urban29-pankyo  precision_mems    4425   1.000   0.999     0.0000     0.0001     71.6
+urban29-pankyo  general_imu       4425   1.000   0.999     0.0000     0.0001     67.8
+urban26-dongtan kaist_real_005    5826   1.000   0.999     0.0000     0.0001     75.7
+urban26-dongtan industrial_fog    5826   1.000   0.999     0.0000     0.0001     75.7
+urban26-dongtan precision_mems    5826   1.000   0.999     0.0000     0.0001     72.8
+urban26-dongtan general_imu       5826   1.000   0.999     0.0000     0.0001     67.4
+urban27-dongtan kaist_real_005   11590   1.000   0.999     0.0000     0.0000     69.9
+urban27-dongtan industrial_fog   11590   1.000   0.999     0.0000     0.0000     69.8
+urban27-dongtan precision_mems   11590   1.000   0.999     0.0000     0.0000     65.3
+urban27-dongtan general_imu      11590   1.000   0.999     0.0000     0.0000     58.5

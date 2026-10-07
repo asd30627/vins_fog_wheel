@@ -1,0 +1,2 @@
+town,density,dist_bin,range_m,gt_range_m,pos_err_m,pred_pos_err,pred_sigma,p_invalid_vel,p_observability,p_utility,invalid_velocity,observability,utility,speed_err_ms
+Town01,dense,15-30m,13.528,15.972,2.451,2.8573575,4.8283324,0.49130568,0.52208704,0.3986217,1.0,1.0,0.0,23.986

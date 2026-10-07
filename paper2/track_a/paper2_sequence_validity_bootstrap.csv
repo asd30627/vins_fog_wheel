@@ -1,0 +1,19 @@
+split,cand,vs,dAURC_mean,ci_lo,ci_hi,verdict
+carla->carla,seq_flat_mlp,TCSV-M(hgbm-mono summary),0.0413,-0.0109,0.1134,tie
+carla->carla,seq_flat_mlp,cv_smoothing_gate,-0.0967,-0.2122,0.0173,tie
+carla->carla,seq_pool_hgbm,TCSV-M(hgbm-mono summary),-0.0273,-0.0566,-0.0008,cand_better
+carla->carla,seq_pool_hgbm,cv_smoothing_gate,-0.1653,-0.2479,-0.0767,cand_better
+carla->carla,seq_pool_mlp,TCSV-M(hgbm-mono summary),-0.0082,-0.047,0.025,tie
+carla->carla,seq_pool_mlp,cv_smoothing_gate,-0.1462,-0.224,-0.0704,cand_better
+kitti->kitti,seq_flat_mlp,TCSV-M(hgbm-mono summary),-0.0165,-0.0262,-0.0104,cand_better
+kitti->kitti,seq_flat_mlp,cv_smoothing_gate,-0.0772,-0.088,-0.0685,cand_better
+kitti->kitti,seq_pool_hgbm,TCSV-M(hgbm-mono summary),-0.0276,-0.0398,-0.0205,cand_better
+kitti->kitti,seq_pool_hgbm,cv_smoothing_gate,-0.0882,-0.0984,-0.0784,cand_better
+kitti->kitti,seq_pool_mlp,TCSV-M(hgbm-mono summary),-0.0348,-0.0481,-0.0261,cand_better
+kitti->kitti,seq_pool_mlp,cv_smoothing_gate,-0.0954,-0.1068,-0.0841,cand_better
+C+Ktr->Khold,seq_flat_mlp,TCSV-M(hgbm-mono summary),0.0042,-0.0031,0.012,tie
+C+Ktr->Khold,seq_flat_mlp,cv_smoothing_gate,-0.053,-0.0639,-0.042,cand_better
+C+Ktr->Khold,seq_pool_hgbm,TCSV-M(hgbm-mono summary),-0.0228,-0.0292,-0.017,cand_better
+C+Ktr->Khold,seq_pool_hgbm,cv_smoothing_gate,-0.08,-0.0903,-0.0702,cand_better
+C+Ktr->Khold,seq_pool_mlp,TCSV-M(hgbm-mono summary),-0.011,-0.0194,-0.0031,cand_better
+C+Ktr->Khold,seq_pool_mlp,cv_smoothing_gate,-0.0682,-0.0798,-0.058,cand_better

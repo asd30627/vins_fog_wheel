@@ -1,0 +1,8 @@
+town,map_available,role,notes
+Town01,1,positive_candidate,urban reference; prior VISION_ACTIVE signal Town01 dense_b1
+Town02,1,positive_candidate,urban mixed traffic
+Town04,1,positive_candidate,suburb/urban mix
+Town05,1,positive_candidate,town center + roundabout
+Town10HD,1,positive_candidate,high-fidelity urban
+Town06,1,boundary_negative,highway; VISION_INERT confirmed Phase 2
+Town07,1,boundary_negative,rural; VISION_INERT confirmed Phase 2

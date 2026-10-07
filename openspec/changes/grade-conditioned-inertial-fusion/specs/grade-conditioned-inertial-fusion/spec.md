@@ -20,6 +20,38 @@ The "strengthen FOG = weaken vision" effect SHALL be claimed **only in the rotat
 - **THEN** the rotation-only mechanism is stated and any translation/position improvement is framed as an indirect consequence of improved rotation
 - **AND** no direct visual-downweighting effect on translation is claimed
 
+### Requirement: Grade-conditioned arbitration — resolved I/O, who's-right teacher, abstention, and bounded coefficient
+The arbitration network SHALL take exactly two runtime-observable inputs and emit one bounded scalar, and SHALL be trained from a direct who's-right-vs-GT label, as follows.
+
+- **Inputs (runtime-observable; KAIST deploy has no GT):** (i) a **grade indicator** = the Allan parameters `[ARW, bias_instability, BRW]` (normalized; not one-hot); (ii) a **scene-dynamics signal `v_dyn2`** = the per-keyframe vision-vs-gyro yaw disagreement, aggregated over a stated window, computed from an **independent un-graded IMU gyro** (NEVER the graded FOG) and evaluated under the **baseline α≡1 / FOG-off pass** (so the proxy does not depend on the deployed α; off-policy caveat accepted).
+- **Output:** a scalar **α ∈ [α_min, α_max]** multiplying the FOG-yaw factor information per keyframe via `sqrt_info *= sqrt(α)`. **α≡1 SHALL be bit-identical to baseline.** `α_min, α_max` SHALL be tied to the oracle grid-search range explored in Probe A; the network SHALL NOT extrapolate beyond explored α.
+- **Teacher (direct who's-right-vs-GT, not the BA-oracle):** per keyframe pair, label α **high** when the FOG-off vision rotation error `err_vis=|Δψ_vis−Δψ_gt|` greatly exceeds the FOG error `err_fog=|Δψ_fog−Δψ_gt|`, and **low** in the opposite case, where `Δψ_vis` comes from a FOG-off vision+IMU pass. The BA grid-search oracle MAY be kept only as a validation cross-check, not the primary teacher.
+- **Abstention (default-safe):** the model SHALL act (α≠1) ONLY inside the identifiable window defined by task 0.e (long segment + real vision-FOG disagreement + GT says FOG is right); **everywhere else α≡1** (baseline). This makes do-no-harm nearly free by construction.
+- **Model class:** a low-capacity, monotone schedule (worse grade + higher disagreement → lower α); a high-capacity flexible network is out of scope for the primary study.
+
+#### Scenario: α is bounded, abstains by default, and is bit-identical at α≡1
+- **WHEN** the arbitration runs outside the identifiable window, or the flag is OFF
+- **THEN** α≡1 and the estimator output is bit-identical to baseline
+- **AND** inside the identifiable window α stays within `[α_min, α_max]` tied to the explored grid range
+
+#### Scenario: dynamics input cannot be confounded by grade
+- **WHEN** `v_dyn2` is computed
+- **THEN** it uses an independent un-graded gyro and the baseline α≡1 / FOG-off pass
+- **AND** the grade↔`v_dyn2` correlation is reported (task 0.e) so a grade-only collapse is detectable
+
+#### Scenario: teacher reads who-is-right, not a flat curve minimum
+- **WHEN** training labels are generated
+- **THEN** α is labelled by which sensor's yaw is closer to GT (FOG vs FOG-off vision), not by the minimum of a per-segment BA-oracle curve
+- **AND** Probe A / Probe B gate the design sign-off before any training
+
+### Requirement: Primary multi-grade data is real KAIST with injected grades; CARLA is corroboration
+The **primary** multi-grade dataset SHALL be obtained by injecting the Allan-variance grades onto KAIST's **real FOG stream** (real trajectory + real scene + real GT), spanning the degradable range (0.05 → 0.3 → 5 → 10°/hr). CARLA's grade matrix SHALL be used as **corroboration**, not as the primary grade anchor. The CARLA-fidelity calibration gate remains required but is no longer the sole grade anchor.
+
+#### Scenario: real-scene grades are primary
+- **WHEN** the cross-grade curves (Curve 1 / Curve 2) are produced
+- **THEN** the primary grade points come from injection onto real KAIST data, and CARLA grade points serve as corroboration
+- **AND** the un-synthesizable better-than-0.05 grades (military 0.01, ideal) are noted as the least-consequential sim-only region
+
 ### Requirement: Official discrete FOG grade list (Allan-variance parameterised)
 The study SHALL use a fixed, official set of discrete FOG grades defined by **Allan-variance standard parameters** (ARW, bias, bias random-walk, scale ppm), not ad-hoc noise. The confirmed base set already exists in `carla_dataset_replay_ros2_imu_grade.py` (PROFILES): `ideal_imu` (ARW 0, bias 0, biasRW 0, scale 0), `military_fog` (0.003, 0.01°/hr, 0.0005, 50ppm), `industrial_fog` (0.03, 0.3°/hr, 0.005, 200ppm), `precision_mems` (0.15, 5.0°/hr, 0.05, 1000ppm). The grade ordering is by bias drift only: `ideal < military < industrial < precision` (note: `precision_mems` is the WORST at 5°/hr, not navigation-grade — the name is counter-intuitive). The set SHALL be extended with a **KAIST-alignment point** (bias=0.05°/hr, between ideal and military) and a **general-IMU point** (~10°/hr, worse than precision_mems). The injection model is per-axis (rad/s) `gyro_meas = (1+scale_err)·gyro_clean + const_bias + bias_RW + white_noise`, applied to the gyro only (accel kept clean).
 
@@ -61,6 +93,18 @@ The primary comparison SHALL use the **120 s sequences** (confirmed 6/6 ideal he
 - **THEN** the primary comparison uses the 120 s sequences and the 300 s sequences serve only as a visually-good-subset corroboration
 - **AND** the report states that grade differences measured on visually-collapsed segments would conflate visual collapse with FOG grade
 
+### Requirement: Pre-registered route-excitation admission (low-excitation degenerate routes are excluded and separately tagged, never silently dropped)
+A CARLA route SHALL be classified as a **low-excitation degenerate route** and **excluded from the main init-success-rate / cross-grade comparison** (kept as data, reported separately and transparently) if BOTH objective conditions hold, measured on the drive phase of the route's GT:
+1. **Insufficient rotational excitation:** drive-phase turn-fraction (fraction of frames with `|yaw-rate| > 5°/s`) `< 10%` (corroborated by straightness `net/path > 0.95` and total drive-phase `|Δyaw| < 60°`).
+2. **Structurally out of method scope:** the method is rotation-only (it arbitrates FOG-vs-vision *rotation*); a route with ~no rotation has no rotation signal for the arbitration to act on.
+
+This criterion SHALL be **pre-registered (locked) before any grade / AI comparison** and applied by the objective excitation measure above — NOT by whether the result is good or bad (that would be cherry-picking). The justification that MAY be written is: "low-excitation near-straight route (route-generator artifact: the spawn point has no turning branches) → scale-unobservable degenerate case, and rotation-only out of method scope." The justification that SHALL NOT be written is "the baseline fails here" or "FOG has no advantage on highways" — those are result-driven cherry-pick framings. Confirmed instance (2026-06-26): **Town04** — all 11 recorded routes are the same route (turn-fraction 0%, total `|Δyaw|` 42°, straightness 0.971), vs admitted towns Town01 (22%, 98°), Town05 (26%, 73°), Town10HD (55%, 179°). Excluding it, the 640 init-rate is 13/27 = 48% (vs 13/36 = 36% raw). A future *curved* Town04 (different spawn / route-gen) MAY be added later; that is a separate dataset task, not a re-admission of the degenerate route.
+
+#### Scenario: A no-excitation route is excluded and tagged, not silently dropped
+- **WHEN** a route's drive-phase turn-fraction is `< 10%` (and straightness `> 0.95`)
+- **THEN** it is excluded from the main init-rate / cross-grade comparison and reported separately as a "low-excitation degenerate route (scale-unobservable, rotation-only out of scope)"
+- **AND** the raw data is retained and the exclusion is shown transparently, with the criterion pre-registered before any grade/AI comparison
+
 ### Requirement: Grade injection and wheel data are merged (Pit 2)
 The grade-injection capability (currently gyro-only on the 37G `v21_300s_grade_matrix`, no wheel) SHALL be merged with wheel-speed data before grade-conditioned fusion is trained/evaluated: either grade injection is wired into the wheel-carrying pipeline (`carla_fwvio`, CSV with wheel + synth FOG) or wheel is added to the grade matrix. The resulting per-sequence data SHALL carry grade-injected gyro AND wheel together.
 
@@ -86,7 +130,7 @@ Before any AI-fusion training, FOG-base (no AI) SHALL be run per grade on KAIST 
 - **AND** the win-% threshold is fixed from that spread before any AI-fusion evaluation
 
 ### Requirement: Do-no-harm acceptance gate per grade
-On clean (visually-healthy) sequences, FOG+AI-fusion ATE SHALL show no reproducible degradation relative to FOG-base **at any grade** — the AI fusion must not make any grade's clean sequence reproducibly worse. Evaluated multi-rep and isolated.
+On clean (visually-healthy) sequences, FOG+AI-fusion ATE SHALL show no reproducible degradation relative to FOG-base **at any grade** — the AI fusion must not make any grade's clean sequence reproducibly worse. The gate SHALL check **translation ATE** as well as rotation: because α changes the FOG rotation information, translation moves through the joint bundle adjustment even though the claim scope is rotation-only; a reproducible translation-ATE regression at any grade fails the gate even if rotation improves. Evaluated multi-rep and isolated.
 
 #### Scenario: No grade's clean sequence reproducibly worsens
 - **WHEN** FOG-base and FOG+AI-fusion are evaluated on the clean set at each grade (multi-rep, isolated)

@@ -1,0 +1,78 @@
+%YAML:1.0
+
+# PRE-TASK 0.d (grade-conditioned-inertial-fusion) — LEVER-ARM geometry-aligned carla_fwvio stereo+IMU config.
+# Derived from carla_stereo_imu_1280_R3.yaml with ONLY the extrinsic TRANSLATION changed to replicate the
+# grade_matrix golden geometry (the geometry that produces NO time-linear scale drift, 1.029x):
+#   grade_matrix recorder (carla_record_stereo_imu_gt_warmup_motion_v21.py) places:
+#     IMU      at vehicle (0.0, 0.0, 1.6)            -> body/IMU frame origin
+#     left_cam at vehicle (1.5, -baseline/2, 1.6)    -> cam0
+#     right_cam at vehicle (1.5, +baseline/2, 1.6)   -> cam1     (baseline 0.2)
+#   => cameras are 1.5 m FORWARD of the IMU = 1.5 m lever-arm (non-zero) -> VI scale observable.
+#   carla_fwvio's old R3 config had IMU co-located with cam0 (zero lever-arm) -> stereo BA drift leaked
+#   into VI fusion -> time-linear scale growth (late ~2.4x). This config + the matching re-record
+#   (collect_carla_v2.py --imu-at-vehicle-center --baseline 0.2) restores the lever-arm.
+# Extrinsic translations COPIED VERBATIM from grade_matrix used_config.yaml (proper_yref body frame):
+#   body_T_cam0 t = (1.5,  0.1, 0.0)   body_T_cam1 t = (1.5, -0.1, 0.0)
+# Rotation R3 [[0,0,1],[0,1,0],[-1,0,0]] (det+1) UNCHANGED. estimate_td=0 (isolate the geometry fix;
+# grade_matrix used td=1 — test separately). IMU must be published with proper_yref (make_player_imu_yref.py).
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/carla/imu"
+image0_topic: "/carla/left/image_raw"
+image1_topic: "/carla/right/image_raw"
+output_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/"
+
+cam0_calib: "cam0_pinhole_1280.yaml"
+cam1_calib: "cam1_pinhole_1280.yaml"
+image_width: 1280
+image_height: 720
+
+estimate_extrinsic: 0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           0, 1, 0, 0.25,
+          -1, 0, 0, 0.0,
+           0, 0, 0, 1   ]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 0, 0, 1, 1.5,
+           0, 1, 0,-0.25,
+          -1, 0, 0, 0.0,
+           0, 0, 0, 1   ]
+
+multiple_thread: 1
+
+#feature tracker
+max_cnt: 250
+min_dist: 15
+freq: 10
+F_threshold: 3.0
+show_track: 0
+flow_back: 1
+
+#imu noise (CARLA IMU; from existing carla_stereo_imu_config)
+acc_n: 0.1
+gyr_n: 0.01
+acc_w: 0.001
+gyr_w: 0.0001
+g_norm: 9.81
+
+#optimization
+max_solver_time: 0.08
+max_num_iterations: 10
+keyframe_parallax: 10.0
+
+estimate_td: 1
+td: 0.0
+
+load_previous_pose_graph: 0
+pose_graph_save_path: "/mnt/sata4t/ivlab3_data/fwvio/results/carla_vins/pose_graph/"
+save_image: 0
+visualize_imu_forward: 0
+visualize_camera_size: 0.4

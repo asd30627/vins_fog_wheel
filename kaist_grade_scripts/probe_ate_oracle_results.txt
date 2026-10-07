@@ -1,0 +1,21 @@
+seq             grade            ATE_base ATE_FOGor FOGredux% ATE_WHLor WHLredux%
+urban28-pankyo  kaist_real_005     17.972    15.946      11.3    13.228      26.4
+urban28-pankyo  industrial_fog     19.725    15.557      21.1    16.373      17.0
+urban28-pankyo  precision_mems     23.009    22.298       3.1    14.055      38.9
+urban28-pankyo  general_imu        17.608    18.538      -5.3    13.986      20.6
+
+urban29-pankyo  kaist_real_005      8.043     7.193      10.6     2.471      69.3
+urban29-pankyo  industrial_fog      8.508     8.429       0.9     1.585      81.4
+urban29-pankyo  precision_mems      8.886     9.007      -1.4     2.051      76.9
+urban29-pankyo  general_imu         3.544     3.544      -0.0     3.532       0.4
+
+urban26-dongtan kaist_real_005     12.873    11.371      11.7     6.831      46.9
+urban26-dongtan industrial_fog     12.218    10.390      15.0     5.213      57.3
+urban26-dongtan precision_mems     12.251    10.962      10.5     6.581      46.3
+urban26-dongtan general_imu        12.529    10.175      18.8     8.216      34.4
+
+urban27-dongtan kaist_real_005     53.768    49.257       8.4    26.495      50.7
+urban27-dongtan industrial_fog     31.061    30.703       1.2    22.938      26.2
+urban27-dongtan precision_mems     35.290    34.825       1.3    31.116      11.8
+urban27-dongtan general_imu        29.185    28.744       1.5    22.506      22.9
+

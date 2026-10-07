@@ -1,0 +1,79 @@
+split,model,aurc,best_base,best_base_aurc,d_aurc,oc90,base_oc90,d_oc90,retention,verdict
+CARLA->CARLA,TCSV_HistGBM_raw,0.7029,qiu_style(proxy),0.7117,-0.0088,0.7541,0.8175,-0.0634,0.5698,small win
+CARLA->CARLA,HistGBM_mono_raw,0.6796,qiu_style(proxy),0.7117,-0.0321,0.719,0.8175,-0.0985,0.8261,STRONG win
+CARLA->CARLA,HistGBM_quant,0.7465,qiu_style(proxy),0.7117,0.0348,0.7875,0.8175,-0.03,0.389,ret_collapse
+CARLA->CARLA,HistGBM_mono_quant,0.7497,qiu_style(proxy),0.7117,0.038,0.8013,0.8175,-0.0162,0.627,LOSE
+CARLA->CARLA,Logistic_quant,0.7693,qiu_style(proxy),0.7117,0.0576,0.8039,0.8175,-0.0136,0.714,LOSE
+CARLA->CARLA,MLP_quant,0.7697,qiu_style(proxy),0.7117,0.058,0.7822,0.8175,-0.0353,0.3478,ret_collapse
+CARLA->CARLA,cv_norm_gate,0.8294,qiu_style(proxy),0.7117,0.1177,0.8365,0.8175,0.019,0.7872,LOSE
+CARLA->CARLA,Ens_rankavg_cv+hgbmq,0.7658,qiu_style(proxy),0.7117,0.0541,0.7855,0.8175,-0.032,0.5881,LOSE
+CARLA->CARLA,Ens_min_cv+hgbmq,0.7559,qiu_style(proxy),0.7117,0.0442,0.7955,0.8175,-0.022,0.7483,LOSE
+CARLA->CARLA,Ens_cv0.7+hgbmq0.3,0.788,qiu_style(proxy),0.7117,0.0763,0.782,0.8175,-0.0355,0.7918,LOSE
+CARLA->CARLA,Hier_cv_then_hgbmq,0.7515,qiu_style(proxy),0.7117,0.0398,0.8002,0.8175,-0.0173,0.6201,LOSE
+CARLA->CARLA,Ens_proba_hgbmq+logq,0.7487,qiu_style(proxy),0.7117,0.037,0.7993,0.8175,-0.0182,0.7094,LOSE
+CARLA->CARLA,Ens_rankavg_cvnorm+hgbmq,0.7681,qiu_style(proxy),0.7117,0.0564,0.7883,0.8175,-0.0292,0.595,LOSE
+KITTI->KITTI,TCSV_HistGBM_raw,0.2098,selectivenet_proxy,0.2113,-0.0015,0.2498,0.2387,0.0111,0.8863,tie
+KITTI->KITTI,HistGBM_mono_raw,0.2279,selectivenet_proxy,0.2113,0.0166,0.3175,0.2387,0.0788,0.8551,tie
+KITTI->KITTI,HistGBM_quant,0.2128,selectivenet_proxy,0.2113,0.0015,0.2401,0.2387,0.0014,0.7829,tie
+KITTI->KITTI,HistGBM_mono_quant,0.2349,selectivenet_proxy,0.2113,0.0236,0.3112,0.2387,0.0725,0.7255,LOSE
+KITTI->KITTI,Logistic_quant,0.2676,selectivenet_proxy,0.2113,0.0563,0.3677,0.2387,0.129,0.7041,LOSE
+KITTI->KITTI,MLP_quant,0.2148,selectivenet_proxy,0.2113,0.0035,0.237,0.2387,-0.0017,0.7867,tie
+KITTI->KITTI,cv_norm_gate,0.3647,selectivenet_proxy,0.2113,0.1534,0.4904,0.2387,0.2517,0.6879,LOSE
+KITTI->KITTI,Ens_rankavg_cv+hgbmq,0.2455,selectivenet_proxy,0.2113,0.0342,0.3034,0.2387,0.0647,0.8013,LOSE
+KITTI->KITTI,Ens_min_cv+hgbmq,0.2467,selectivenet_proxy,0.2113,0.0354,0.3301,0.2387,0.0914,0.6713,LOSE
+KITTI->KITTI,Ens_cv0.7+hgbmq0.3,0.2585,selectivenet_proxy,0.2113,0.0472,0.3501,0.2387,0.1114,0.8225,LOSE
+KITTI->KITTI,Hier_cv_then_hgbmq,0.2371,selectivenet_proxy,0.2113,0.0258,0.3115,0.2387,0.0728,0.7204,LOSE
+KITTI->KITTI,Ens_proba_hgbmq+logq,0.2447,selectivenet_proxy,0.2113,0.0334,0.3303,0.2387,0.0916,0.7456,LOSE
+KITTI->KITTI,Ens_rankavg_cvnorm+hgbmq,0.2611,selectivenet_proxy,0.2113,0.0498,0.3494,0.2387,0.1107,0.761,LOSE
+CARLA->KITTI,TCSV_HistGBM_raw,0.406,cv_smoothing_gate,0.327,0.079,0.4671,0.4219,0.0452,0.538,LOSE
+CARLA->KITTI,HistGBM_mono_raw,0.3781,cv_smoothing_gate,0.327,0.0511,0.4753,0.4219,0.0534,0.6303,LOSE
+CARLA->KITTI,HistGBM_quant,0.3922,cv_smoothing_gate,0.327,0.0652,0.4471,0.4219,0.0252,0.3865,LOSE
+CARLA->KITTI,HistGBM_mono_quant,0.3919,cv_smoothing_gate,0.327,0.0649,0.4564,0.4219,0.0345,0.4976,LOSE
+CARLA->KITTI,Logistic_quant,0.3581,cv_smoothing_gate,0.327,0.0311,0.4695,0.4219,0.0476,0.6442,LOSE
+CARLA->KITTI,MLP_quant,0.4003,cv_smoothing_gate,0.327,0.0733,0.4879,0.4219,0.066,0.4749,LOSE
+CARLA->KITTI,cv_norm_gate,0.4172,cv_smoothing_gate,0.327,0.0902,0.5466,0.4219,0.1247,0.6868,LOSE
+CARLA->KITTI,Ens_rankavg_cv+hgbmq,0.3348,cv_smoothing_gate,0.327,0.0078,0.4175,0.4219,-0.0044,0.453,tie
+CARLA->KITTI,Ens_min_cv+hgbmq,0.3473,cv_smoothing_gate,0.327,0.0203,0.4187,0.4219,-0.0032,0.4944,LOSE
+CARLA->KITTI,Ens_cv0.7+hgbmq0.3,0.324,cv_smoothing_gate,0.327,-0.003,0.4228,0.4219,0.0009,0.6212,tie
+CARLA->KITTI,Hier_cv_then_hgbmq,0.3817,cv_smoothing_gate,0.327,0.0547,0.4284,0.4219,0.0065,0.4915,LOSE
+CARLA->KITTI,Ens_proba_hgbmq+logq,0.359,cv_smoothing_gate,0.327,0.032,0.4644,0.4219,0.0425,0.5938,LOSE
+CARLA->KITTI,Ens_rankavg_cvnorm+hgbmq,0.367,cv_smoothing_gate,0.327,0.04,0.5045,0.4219,0.0826,0.4568,LOSE
+KITTI->CARLA,TCSV_HistGBM_raw,0.8228,qiu_style(proxy),0.8053,0.0175,0.8187,0.8721,-0.0534,0.58,small win
+KITTI->CARLA,HistGBM_mono_raw,0.822,qiu_style(proxy),0.8053,0.0167,0.8206,0.8721,-0.0515,0.6432,small win
+KITTI->CARLA,HistGBM_quant,0.8197,qiu_style(proxy),0.8053,0.0144,0.8172,0.8721,-0.0549,0.7672,small win
+KITTI->CARLA,HistGBM_mono_quant,0.8227,qiu_style(proxy),0.8053,0.0174,0.8285,0.8721,-0.0436,0.7554,small win
+KITTI->CARLA,Logistic_quant,0.8387,qiu_style(proxy),0.8053,0.0334,0.8387,0.8721,-0.0334,0.7435,LOSE
+KITTI->CARLA,MLP_quant,0.8173,qiu_style(proxy),0.8053,0.012,0.8304,0.8721,-0.0417,0.7599,small win
+KITTI->CARLA,cv_norm_gate,0.8505,qiu_style(proxy),0.8053,0.0452,0.8719,0.8721,-0.0002,0.6381,LOSE
+KITTI->CARLA,Ens_rankavg_cv+hgbmq,0.8335,qiu_style(proxy),0.8053,0.0282,0.8293,0.8721,-0.0428,0.8055,small win
+KITTI->CARLA,Ens_min_cv+hgbmq,0.8336,qiu_style(proxy),0.8053,0.0283,0.8292,0.8721,-0.0429,0.699,small win
+KITTI->CARLA,Ens_cv0.7+hgbmq0.3,0.8377,qiu_style(proxy),0.8053,0.0324,0.8334,0.8721,-0.0387,0.8343,LOSE
+KITTI->CARLA,Hier_cv_then_hgbmq,0.8239,qiu_style(proxy),0.8053,0.0186,0.8306,0.8721,-0.0415,0.7469,small win
+KITTI->CARLA,Ens_proba_hgbmq+logq,0.8297,qiu_style(proxy),0.8053,0.0244,0.8273,0.8721,-0.0448,0.7492,small win
+KITTI->CARLA,Ens_rankavg_cvnorm+hgbmq,0.832,qiu_style(proxy),0.8053,0.0267,0.8451,0.8721,-0.027,0.805,LOSE
+C+Ktr->Khold,TCSV_HistGBM_raw,0.213,selectivenet_proxy,0.2362,-0.0232,0.269,0.319,-0.05,0.9138,small win
+C+Ktr->Khold,HistGBM_mono_raw,0.2301,selectivenet_proxy,0.2362,-0.0061,0.3181,0.319,-0.0009,0.9084,tie
+C+Ktr->Khold,HistGBM_quant,0.2371,selectivenet_proxy,0.2362,0.0009,0.336,0.319,0.017,0.6247,tie
+C+Ktr->Khold,HistGBM_mono_quant,0.2405,selectivenet_proxy,0.2362,0.0043,0.3321,0.319,0.0131,0.7633,tie
+C+Ktr->Khold,Logistic_quant,0.2674,selectivenet_proxy,0.2362,0.0312,0.3527,0.319,0.0337,0.7599,LOSE
+C+Ktr->Khold,MLP_quant,0.223,selectivenet_proxy,0.2362,-0.0132,0.2798,0.319,-0.0392,0.7575,tie
+C+Ktr->Khold,cv_norm_gate,0.3639,selectivenet_proxy,0.2362,0.1277,0.4904,0.319,0.1714,0.6909,LOSE
+C+Ktr->Khold,Ens_rankavg_cv+hgbmq,0.2485,selectivenet_proxy,0.2362,0.0123,0.3273,0.319,0.0083,0.8004,tie
+C+Ktr->Khold,Ens_min_cv+hgbmq,0.2493,selectivenet_proxy,0.2362,0.0131,0.3375,0.319,0.0185,0.6687,tie
+C+Ktr->Khold,Ens_cv0.7+hgbmq0.3,0.2605,selectivenet_proxy,0.2362,0.0243,0.3595,0.319,0.0405,0.8082,LOSE
+C+Ktr->Khold,Hier_cv_then_hgbmq,0.2424,selectivenet_proxy,0.2362,0.0062,0.3295,0.319,0.0105,0.7555,tie
+C+Ktr->Khold,Ens_proba_hgbmq+logq,0.2455,selectivenet_proxy,0.2362,0.0093,0.3269,0.319,0.0079,0.7718,tie
+C+Ktr->Khold,Ens_rankavg_cvnorm+hgbmq,0.2671,selectivenet_proxy,0.2362,0.0309,0.373,0.319,0.054,0.7502,LOSE
+K+Ctr->Chold,TCSV_HistGBM_raw,0.6847,qiu_style(proxy),0.7176,-0.0329,0.6995,0.8135,-0.114,0.4005,ret_collapse
+K+Ctr->Chold,HistGBM_mono_raw,0.7181,qiu_style(proxy),0.7176,0.0005,0.7249,0.8135,-0.0886,0.5835,STRONG win
+K+Ctr->Chold,HistGBM_quant,0.7792,qiu_style(proxy),0.7176,0.0616,0.7878,0.8135,-0.0257,0.4737,LOSE
+K+Ctr->Chold,HistGBM_mono_quant,0.7627,qiu_style(proxy),0.7176,0.0451,0.7811,0.8135,-0.0324,0.7529,LOSE
+K+Ctr->Chold,Logistic_quant,0.8033,qiu_style(proxy),0.7176,0.0857,0.7983,0.8135,-0.0152,0.778,LOSE
+K+Ctr->Chold,MLP_quant,0.7641,qiu_style(proxy),0.7176,0.0465,0.7975,0.8135,-0.016,0.5332,LOSE
+K+Ctr->Chold,cv_norm_gate,0.8303,qiu_style(proxy),0.7176,0.1127,0.8365,0.8135,0.023,0.7529,LOSE
+K+Ctr->Chold,Ens_rankavg_cv+hgbmq,0.7959,qiu_style(proxy),0.7176,0.0783,0.7843,0.8135,-0.0292,0.865,LOSE
+K+Ctr->Chold,Ens_min_cv+hgbmq,0.7909,qiu_style(proxy),0.7176,0.0733,0.7815,0.8135,-0.032,0.7437,LOSE
+K+Ctr->Chold,Ens_cv0.7+hgbmq0.3,0.8077,qiu_style(proxy),0.7176,0.0901,0.7875,0.8135,-0.026,0.8581,LOSE
+K+Ctr->Chold,Hier_cv_then_hgbmq,0.764,qiu_style(proxy),0.7176,0.0464,0.7818,0.8135,-0.0317,0.7529,LOSE
+K+Ctr->Chold,Ens_proba_hgbmq+logq,0.7807,qiu_style(proxy),0.7176,0.0631,0.7862,0.8135,-0.0273,0.7963,LOSE
+K+Ctr->Chold,Ens_rankavg_cvnorm+hgbmq,0.8,qiu_style(proxy),0.7176,0.0824,0.7899,0.8135,-0.0236,0.8169,LOSE

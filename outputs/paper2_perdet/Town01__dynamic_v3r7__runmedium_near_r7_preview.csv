@@ -1,0 +1,4 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town01,medium,medium_near_r7_preview,166,-1,person,0.359,11.0,10.6,1.039,116.2,0.0,634.3,155.3,0.75,0.083,85.333,119.605,44.483,,0,85.333,83.807,,1,93.759,vehicle.audi.etron,26.535,0.212,,,30m+
+Town01,medium,medium_near_r7_preview,170,-1,person,0.379,10.0,10.4,0.961,103.1,0.0,634.8,154.3,0.812,0.108,78.769,110.493,44.53,0.046,4,78.769,77.486,43.187,1,93.18,vehicle.audi.etron,18.307,1.528,41.66,44.028,30m+
+Town01,medium,medium_near_r7_preview,258,10,car,0.378,11.7,7.3,1.617,85.3,0.0,302.1,243.4,0.688,0.05,93.091,93.237,-3.208,,0,93.091,-5.217,,1,71.497,vehicle.dodge.charger_police,21.741,8.066,,,30m+

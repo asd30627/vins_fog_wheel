@@ -1,0 +1,17 @@
+grade,run,variant,ate_rmse,ate_mean,rpe_trans,early,late,vins_fail,n_vio,mean_outlier_ratio,feat_mgr,diverged,det_ok,ate_delta_pct,rpe_delta_pct,outdir
+ideal_imu,dense_b1,baseline,3.153,2.646,0.2521,1.0149,0.4565,0,520,0.3408,60.2,0,0,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_dense_b1_baseline
+ideal_imu,dense_b1,cull_off,2.823,2.241,0.2171,1.0025,0.4301,0,520,0.0,255.8,0,,-10.47,-13.88,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_dense_b1_cull_off
+ideal_imu,dense_b1,all_object_mask,2.715,2.034,0.184,0.9918,0.4135,0,520,0.3279,51.4,0,,-13.89,-27.01,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_dense_b1_all_object_mask
+ideal_imu,dense_b1,oracle_mask,2.715,2.034,0.184,0.9918,0.4135,0,520,0.3234,51.3,0,,-13.89,-27.01,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_dense_b1_oracle_mask
+ideal_imu,medium_b1,baseline,2.702,1.847,0.1554,0.9708,0.3979,0,520,0.3291,58.0,0,0,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_medium_b1_baseline
+ideal_imu,medium_b1,cull_off,2.726,2.032,0.1807,0.9916,0.4087,0,520,0.0,250.2,0,,0.89,16.28,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_medium_b1_cull_off
+ideal_imu,medium_b1,all_object_mask,2.702,1.847,0.1554,0.9708,0.3979,0,520,0.3354,58.9,0,,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_medium_b1_all_object_mask
+ideal_imu,medium_b1,oracle_mask,2.726,2.032,0.1807,0.9916,0.4087,0,520,0.3339,58.3,0,,0.89,16.28,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_ideal_imu_medium_b1_oracle_mask
+industrial_fog,dense_b1,baseline,2.863,2.456,0.2454,1.0115,0.5279,0,520,0.348,59.5,0,1,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_dense_b1_baseline
+industrial_fog,dense_b1,cull_off,2.863,2.456,0.2454,1.0115,0.5279,0,520,0.0,254.7,0,,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_dense_b1_cull_off
+industrial_fog,dense_b1,all_object_mask,2.455,1.855,0.1839,0.9874,0.4945,0,520,0.3287,55.6,0,,-14.25,-25.06,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_dense_b1_all_object_mask
+industrial_fog,dense_b1,oracle_mask,2.455,1.855,0.1839,0.9874,0.4945,0,520,0.3352,55.2,0,,-14.25,-25.06,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_dense_b1_oracle_mask
+industrial_fog,medium_b1,baseline,2.368,1.706,0.157,0.9679,0.4806,0,520,0.3468,58.4,0,1,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_medium_b1_baseline
+industrial_fog,medium_b1,cull_off,2.416,1.847,0.1768,0.9893,0.4852,0,520,0.0,252.0,0,,2.03,12.61,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_medium_b1_cull_off
+industrial_fog,medium_b1,all_object_mask,2.368,1.706,0.157,0.9679,0.4806,0,520,0.3395,58.9,0,,0.0,0.0,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_medium_b1_all_object_mask
+industrial_fog,medium_b1,oracle_mask,2.416,1.847,0.1768,0.9893,0.4852,0,520,0.3291,58.9,0,,2.03,12.61,/mnt/sata4t/ivlab3_data/fwvio/results/paper2_vinsaware/vs_industrial_fog_medium_b1_oracle_mask

@@ -1,0 +1,17 @@
+run,quality,variant,ate_rmse,rpe,early,late,diverged,vins_fail,mean_mgr_feat,mean_outlier_ratio,n_keyframes
+Town01__dynamic_v3__rundense_b1,PASS_CORE,baseline,3.924,0.3077,1.0149,0.5109,False,0,52.4,0.517,267
+Town01__dynamic_v3__rundense_b1,PASS_CORE,all_dynamic,3.543,0.2438,0.9968,0.4666,False,0,50.1,0.502,267
+Town01__dynamic_v3__rundense_b1,PASS_CORE,validity_aware,3.512,0.2347,0.9936,0.4598,False,0,49.7,0.493,267
+Town01__dynamic_v3__rundense_b1,PASS_CORE,oracle,3.543,0.2439,0.9968,0.4667,False,0,51.9,0.522,267
+Town01__dynamic_v3__runmedium_b1,PASS_CORE,baseline,3.517,0.2076,0.9928,0.4505,False,0,58.5,0.517,269
+Town01__dynamic_v3__runmedium_b1,PASS_CORE,all_dynamic,3.418,0.1871,0.9772,0.438,False,0,56.2,0.468,267
+Town01__dynamic_v3__runmedium_b1,PASS_CORE,validity_aware,3.418,0.1871,0.9772,0.438,False,0,56.3,0.486,267
+Town01__dynamic_v3__runmedium_b1,PASS_CORE,oracle,3.418,0.1871,0.9772,0.438,False,0,59.3,0.51,267
+Town06__dynamic_v3__rundense_b1,PASS_CORE,baseline,41.69,3.5642,1.2917,2.7898,False,0,47.0,0.344,347
+Town06__dynamic_v3__rundense_b1,PASS_CORE,all_dynamic,19.38,1.0961,1.0255,1.9354,False,0,50.8,0.356,347
+Town06__dynamic_v3__rundense_b1,PASS_CORE,validity_aware,20.121,1.2715,1.0596,1.9517,False,0,52.1,0.334,348
+Town06__dynamic_v3__rundense_b1,PASS_CORE,oracle,24.534,1.855,1.1257,2.1032,False,0,50.7,0.337,347
+Town07__dynamic_v3__rundense_b1,INVALID_RECORDING,baseline,25.856,2.2145,1.0596,,False,0,48.9,0.411,348
+Town07__dynamic_v3__rundense_b1,INVALID_RECORDING,all_dynamic,33.432,3.0173,0.9987,,False,0,60.5,0.513,347
+Town07__dynamic_v3__rundense_b1,INVALID_RECORDING,validity_aware,31.285,2.7667,1.0267,,False,0,48.3,0.398,348
+Town07__dynamic_v3__rundense_b1,INVALID_RECORDING,oracle,22.352,1.9582,0.9556,,False,0,57.5,0.476,347

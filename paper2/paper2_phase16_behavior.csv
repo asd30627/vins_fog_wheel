@@ -1,0 +1,3 @@
+policy,high_cost_msgs,high_cost_true,cmd2_msgs,stopped_on_risk,moved_on_risk,moved_when_safe,stopped_when_safe,gate_1_6_pass
+always_full,115,0,689,0,0,677,12,0
+ours,114,40,688,240,0,437,11,1

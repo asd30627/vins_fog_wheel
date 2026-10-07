@@ -1,0 +1,41 @@
+{
+  "BEST_PF": "TCSV-HistGBM-bal",
+  "BEST_SEQ": "seq_pool_hgbm",
+  "SEQ_T": 5,
+  "SEQ_POOL": "full",
+  "pf_rank": {
+    "TCSV-HistGBM-bal": 0.4962,
+    "TCSV-M(mono)": 0.4978,
+    "TCSV-HistGBM": 0.5015,
+    "MLP(128,64)": 0.5213,
+    "logistic_balanced": 0.542,
+    "logistic": 0.5422,
+    "cv_smoothing_gate": 0.579,
+    "qiu_proxy(logit-geo)": 0.6224,
+    "conf_gate": 0.6245,
+    "depth_gate": 0.635,
+    "bbox_gate": 0.6458,
+    "distance_gate": 0.657
+  },
+  "seq_rank": {
+    "seq_pool_hgbm": 0.4791,
+    "seq_pool_mlp": 0.5026,
+    "seq_GRU": 0.5267,
+    "seq_TCN": 0.5592,
+    "seq_Transformer": 0.5649
+  },
+  "seq_best_per_ds": {
+    "carla": [
+      5,
+      "full"
+    ],
+    "kitti": [
+      5,
+      "full"
+    ]
+  },
+  "has_torch": true,
+  "n_carla": 23567,
+  "n_kitti": 37022,
+  "runtime_s": 121.5
+}

@@ -1,0 +1,7 @@
+scenario,model,dAUROC,wilcoxon_p,n_folds
+CARLA->CARLA(run),OVI_geom,-0.0042,0.00056,25
+CARLA->CARLA(run),selective_logistic,0.0084,0.56017,25
+CARLA->CARLA(run),selective_hist_gbm,0.1301,1e-05,25
+KITTI->KITTI(seq),OVI_geom,0.021,2e-05,25
+KITTI->KITTI(seq),selective_logistic,0.1435,0.0,25
+KITTI->KITTI(seq),selective_hist_gbm,0.2024,0.0,25

@@ -1,0 +1,6 @@
+priority,town,scenario,frames,npc_preset,status,preview_obj_region_ratio,preview_verdict
+1,Town01,anchor_recovery,3600,"--npc 18 --npc-global 8 --npc-static-frac 0.6",deferred_weak_signal,0.001,PASS(core)
+2,Town10HD,anchor_recovery,3600,"--npc 18 --npc-global 8 --npc-static-frac 0.6",deferred_weak_signal,0.018,PASS(core)
+3,Town02,anchor_recovery,3600,"--npc 18 --npc-global 8 --npc-static-frac 0.6",RUN,0.178,PASS(all 6)
+4,Town02,dynamic_noise,3600,"--npc 22 --npc-global 10 --npc-static-frac 0.1",RUN,0.236,PASS(core)
+5,Town06/Town07,boundary,0,none,not_needed,,

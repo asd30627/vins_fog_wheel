@@ -1,0 +1,5 @@
+policy,coverage,false_alarm,missed_risk,overconf_vel_accepted,n
+always_emit,1.0,0.1999,0.0237,0.214,4043
+TCSV_emit@cov0.9,0.9,0.1677,0.025,0.182,3638
+TCSV_emit@cov0.8,0.8,0.1404,0.0275,0.1558,3234
+TCSV_emit@cov0.7,0.7,0.1449,0.0304,0.1615,2830

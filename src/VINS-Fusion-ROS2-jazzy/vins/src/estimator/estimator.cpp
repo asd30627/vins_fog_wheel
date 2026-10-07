@@ -40,6 +40,51 @@ double meanOf(const std::vector<double> &v)
     return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size());
 }
 
+// ===== IMU-COV-ORACLE (15-dim ideal covariance ceiling) =====
+// GT pose+velocity provider. Loads <gt.tum> (ts x y z qx qy qz qw) once; world-frame velocities via central
+// finite-difference. The estimator evaluates the IMU factor residual at these GT states and sets the per-dim
+// ideal variance oracle_cov_diag = GAIN * residual^2 (downweight-only inflation in imu_factor.h).
+// Env: REL_IMU_COV_ORACLE=1 + REL_IMU_COV_ORACLE_GT=<gt.tum>; REL_IMU_COV_GAIN (default 1.0). OFF => stock cov.
+// ⚠ uses GT (KAIST GT fuses FOG+wheel = circular) => OPTIMISTIC upper bound (ceiling).
+bool imuCovOracleOn()
+{
+    static const bool ON = []{ const char *e = std::getenv("REL_IMU_COV_ORACLE"); return e && std::string(e) == "1"; }();
+    return ON;
+}
+double imuCovOracleGain()
+{
+    static const double G = []{ const char *e = std::getenv("REL_IMU_COV_GAIN"); return e ? atof(e) : 1.0; }();
+    return G;
+}
+bool imuOracleGtState(double t, Eigen::Vector3d &P, Eigen::Quaterniond &Q, Eigen::Vector3d &V)
+{
+    static std::vector<double> gts; static std::vector<Eigen::Vector3d> gp;
+    static std::vector<Eigen::Quaterniond> gq; static std::vector<Eigen::Vector3d> gv; static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        if (const char *f = std::getenv("REL_IMU_COV_ORACLE_GT")) {
+            std::ifstream in(f); std::string line;
+            while (std::getline(in, line)) {
+                if (line.empty() || line[0] == '#') continue;
+                std::istringstream ss(line); double tt, x, y, z, qx, qy, qz, qw;
+                if (ss >> tt >> x >> y >> z >> qx >> qy >> qz >> qw)
+                { gts.push_back(tt); gp.emplace_back(x, y, z); gq.push_back(Eigen::Quaterniond(qw, qx, qy, qz).normalized()); }
+            }
+            gv.assign(gp.size(), Eigen::Vector3d::Zero());
+            for (size_t i = 1; i + 1 < gp.size(); ++i) { double dt = gts[i+1] - gts[i-1]; if (dt > 1e-6) gv[i] = (gp[i+1] - gp[i-1]) / dt; }
+            if (gp.size() > 2) { gv.front() = gv[1]; gv.back() = gv[gv.size()-2]; }
+            ROS_WARN("[IMU_COV_ORACLE] loaded %zu GT poses (+velocities) from %s", gts.size(), f);
+        }
+    }
+    if (gts.size() < 2) return false;
+    int idx = (int)(std::lower_bound(gts.begin(), gts.end(), t) - gts.begin());
+    if (idx <= 0) idx = 0;
+    else if (idx >= (int)gts.size()) idx = (int)gts.size() - 1;
+    else if (std::fabs(gts[idx-1]-t) < std::fabs(gts[idx]-t)) idx--;
+    P = gp[idx]; Q = gq[idx]; V = gv[idx];
+    return true;
+}
+
 double stdOf(const std::vector<double> &v)
 {
     if (v.size() <= 1)
@@ -204,6 +249,19 @@ Estimator::Estimator(): f_manager{Rs}
     visual_gate_tau = 0.5;
 
     clearState();
+
+    // CARLA_WHEEL_SIGMA (env, default OFF): override the hardcoded wheel forward/lateral measurement sigma
+    // (wheel_sigmaL_/R_, default 0.02 m/sample) to tighten the wheel scale anchor. Synthetic GT-derived
+    // wheel deltas are near-noise-free, so a smaller sigma (e.g. 0.005) lets the wheel dominate scale and
+    // pull the metric scale to ~1.0 instead of the residual late-drift (~1.66) at 0.02. Env unset => header
+    // defaults => KAIST/gate runs numerically unchanged. Same env-knob pattern as CARLA_SOFT_FAILURE.
+    if (const char* e = std::getenv("CARLA_WHEEL_SIGMA")) {
+        double s = atof(e);
+        if (s > 0.0) {
+            wheel_sigmaL_ = s; wheel_sigmaR_ = s;
+            ROS_WARN("[CARLA_WHEEL_SIGMA] wheel sigma L/R overridden -> %.5f (default 0.02)", s);
+        }
+    }
 }
 
 Estimator::~Estimator()
@@ -1776,10 +1834,22 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         {
             ROS_WARN("failure detection!");
             failure_occur = 1;
-            clearState();
-            setParameter();
-            ROS_WARN("system reboot!");
-            return;
+            // CARLA_SOFT_FAILURE (env, default OFF): skip the clearState()/reboot on failure detection.
+            // Restores UPSTREAM VINS-Fusion behavior (upstream disables failureDetection via `return false`).
+            // Needed for CARLA planar ground-vehicle driving where the accelerometer bias is UNOBSERVABLE
+            // (no-rotation / constant-accel) and transiently trips the Bas>2.5 check, hard-rebooting the
+            // estimator before wheel/turning excitation can constrain scale. Default OFF => KAIST/gate runs
+            // (which never set this env) take the identical clearState/reboot/return path => numerically
+            // unchanged. Same env-knob pattern as REL_FIX_IMU_BIAS / DEBUG_FAILDET.
+            static const bool SOFT_FAIL = []{ const char* e = std::getenv("CARLA_SOFT_FAILURE"); return e && std::string(e) == "1"; }();
+            if (!SOFT_FAIL)
+            {
+                clearState();
+                setParameter();
+                ROS_WARN("system reboot!");
+                return;
+            }
+            ROS_WARN("[CARLA_SOFT_FAILURE] failure detected but reboot SKIPPED (estimator keeps running).");
         }
         // if (failure_flag)
         // {
@@ -2232,6 +2302,7 @@ void Estimator::double2vector()
 
 bool Estimator::failureDetection()
 {
+    return false;   // DISABLED (matches upstream VINS-Fusion, which returns false here). User-authorized 2026-06-28.
     // ---- failure-detection diagnostic (DEBUG ONLY; print-only, no logic change) ----
     // Gated by env DEBUG_FAILDET=1. Prints every candidate trigger + state-norm context so we can
     // see WHICH condition fires and the correction magnitude when adaptive_floor un-freezes the solver.
@@ -2350,8 +2421,15 @@ void Estimator::optimization()
     // DIAGNOSTIC for the keep-mag alpha non-monotonicity hypothesis (is the delta=1.0 hard outlier
     // threshold the chaos source? widen delta / remove robust and re-run the alpha sweep).
     static const double REL_HUBER_DELTA = [](){ const char* e=std::getenv("REL_HUBER_DELTA"); return e?std::atof(e):1.0; }();
-    loss_function = (REL_HUBER_DELTA > 0.0) ? static_cast<ceres::LossFunction*>(new ceres::HuberLoss(REL_HUBER_DELTA))
-                                            : static_cast<ceres::LossFunction*>(NULL);
+    // REL_VISUAL_ROBUST_LOSS (env, default 1): master on/off for the VISUAL reprojection robust loss
+    // ONLY. =1 -> keep Huber(REL_HUBER_DELTA) exactly as stock (bit-identical when REL_HUBER_DELTA unset).
+    // =0 -> NULL loss on mono + stereo visual factors (no Huber/Cauchy). Does NOT affect IMU factor
+    // (NULL), marginalization prior (NULL), wheel factors (own HuberLoss(wheel_huber_)), or FOG/NHC.
+    // Purpose: de-confound TCSV soft weighting from the pre-existing visual M-estimator (Paper-2 ablation).
+    static const bool REL_VISUAL_ROBUST_LOSS = [](){ const char* e=std::getenv("REL_VISUAL_ROBUST_LOSS"); return e ? (std::atoi(e)!=0) : true; }();
+    loss_function = (REL_VISUAL_ROBUST_LOSS && REL_HUBER_DELTA > 0.0)
+                        ? static_cast<ceres::LossFunction*>(new ceres::HuberLoss(REL_HUBER_DELTA))
+                        : static_cast<ceres::LossFunction*>(NULL);
     //loss_function = new ceres::CauchyLoss(1.0 / FOCAL_LENGTH);
     //ceres::LossFunction* loss_function = new ceres::HuberLoss(1.0);
 
@@ -2453,6 +2531,16 @@ void Estimator::optimization()
             int j = i + 1;
             if (pre_integrations[j]->sum_dt > 10.0)
                 continue;
+            if (imuCovOracleOn()) {
+                // 15-dim ideal covariance oracle: evaluate IMU residual at GT poses+velocities (current biases) ->
+                // per-dim ideal variance = GAIN * residual^2 -> imu_factor inflates cov diagonal where IMU is worse.
+                Eigen::Vector3d Pi_g, Vi_g, Pj_g, Vj_g; Eigen::Quaterniond Qi_g, Qj_g;
+                if (imuOracleGtState(Headers[i], Pi_g, Qi_g, Vi_g) && imuOracleGtState(Headers[j], Pj_g, Qj_g, Vj_g)) {
+                    Eigen::Matrix<double,15,1> r = pre_integrations[j]->evaluate(
+                        Pi_g, Qi_g, Vi_g, Bas[i], Bgs[i], Pj_g, Qj_g, Vj_g, Bas[j], Bgs[j]);
+                    pre_integrations[j]->oracle_cov_diag = (imuCovOracleGain() * r.array().square()).matrix();
+                }
+            }
             IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
             problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
             ++dbg_imu;
@@ -3200,6 +3288,13 @@ double Estimator::reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, 
 void Estimator::outliersRejection(set<int> &removeIndex)
 {
     //return;
+    // REL_BACKEND_OUTLIER_CULL (env, default 1): master on/off for the HARD backend reprojection
+    // outlier cull (mean reproj > 3 px -> feature removed). =0 -> leave removeIndex empty (no cull).
+    // ABLATION ONLY (de-confound TCSV from the 3-px cull); NOT a production setting. Independent of
+    // REL_VISUAL_ROBUST_LOSS (Huber). Does not touch IMU/marg/wheel.
+    static const bool REL_BACKEND_OUTLIER_CULL = [](){ const char* e=std::getenv("REL_BACKEND_OUTLIER_CULL"); return e ? (std::atoi(e)!=0) : true; }();
+    if (!REL_BACKEND_OUTLIER_CULL)
+        return;
     int feature_index = -1;
     for (auto &it_per_id : f_manager.feature)
     {

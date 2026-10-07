@@ -1,0 +1,2 @@
+policy,validity_msgs,track_msgs,full_state_count,position_only_count,invalid_velocity_count,unobservable_count,conservative_warning_count,high_cost_count,high_cost_msgs,D1_valid_velocity_retained,D2_wrong_velocity_accepted,D0_static_wrongly_predicted,max_risk
+always_full,65,65,120,75,0,0,0,0,65,65,55,0,0.1

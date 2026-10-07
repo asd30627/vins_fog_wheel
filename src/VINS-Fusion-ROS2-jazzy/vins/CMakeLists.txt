@@ -89,7 +89,7 @@ install(
 
 # Install nodes
 install(
-  TARGETS vins_node
+  TARGETS vins_node kitti_gps_test kitti_odom_test
   DESTINATION lib/${PROJECT_NAME}
 )
 

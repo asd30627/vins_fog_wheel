@@ -1,0 +1,5 @@
+town,density,run,frame,track_id,cls,conf,bbox_w,bbox_h,bbox_aspect,bbox_area,area_frac,u,v,disp_med,disp_std,depth_m,range_m,bearing_deg,bearing_change_deg,track_age,body_fwd,body_lat,raw_speed_ms,matched,gt_range_m,gt_type_id,pos_err_m,gt_speed_ms,speed_err_ms,dir_err_deg,dist_bin
+Town07,x,Town07__dynamic_v3fix__runmedium_near_prev,222,-1,truck,0.435,28.7,19.5,1.472,559.1,0.002,441.7,254.4,8.0,2.943,20.0,21.398,20.825,,0,20.0,7.607,,1,194.03,vehicle.chevrolet.impala,172.667,7.454,,,30m+
+Town07,x,Town07__dynamic_v3fix__runmedium_near_prev,223,2,truck,0.416,27.9,19.0,1.474,530.1,0.002,443.0,254.2,8.0,2.59,20.0,21.427,21.029,,0,20.0,7.689,,1,193.522,vehicle.chevrolet.impala,172.12,7.734,,,30m+
+Town07,x,Town07__dynamic_v3fix__runmedium_near_prev,224,2,truck,0.439,28.2,19.1,1.479,536.9,0.002,445.1,254.0,8.0,2.506,20.0,21.474,21.349,0.321,1,20.0,7.818,8.518,1,193.012,vehicle.chevrolet.impala,171.554,7.625,0.893,115.031,30m+
+Town07,x,Town07__dynamic_v3fix__runmedium_near_prev,227,-1,person,0.608,28.0,69.0,0.405,1933.0,0.006,524.5,276.2,21.875,0.484,7.314,8.68,32.579,11.754,5,7.314,4.674,44.385,1,210.202,vehicle.diamondback.century,201.523,2.71,41.675,77.988,30m+

@@ -1,0 +1,11 @@
+stratum,model,auroc,overconf,n
+density=dense,distance_gate,0.6903,0.7895,9132
+density=dense,selective_logistic,0.7073,0.745,9132
+density=medium,distance_gate,0.6191,0.7643,4931
+density=medium,selective_logistic,0.5525,0.8633,4931
+density=sparse,distance_gate,0.5922,0.8915,1747
+density=sparse,selective_logistic,0.3757,0.9717,1747
+town=Town01,distance_gate,0.6708,0.8102,7023
+town=Town01,selective_logistic,0.5561,0.883,7023
+town=Town10HD,distance_gate,0.6888,0.8086,8788
+town=Town10HD,selective_logistic,0.7438,0.7864,8788

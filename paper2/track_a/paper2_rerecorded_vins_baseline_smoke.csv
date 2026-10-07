@@ -1,0 +1,5 @@
+run,rep,n_vio,ate_rmse,rpe_trans,early,late,vins_fail,feat_raw,feat_mgr,mean_outlier,det_ok
+Town06__dynamic_v3fix__rundense_near_core,1,840,25.916,1.6906,0.9951,1.5757,0,229,62,0.289,
+Town06__dynamic_v3fix__rundense_near_core,2,861,4184.36,1.8134,0.9951,1.5892,0,229,61,0.294,DIFFER
+Town07__dynamic_v3fix__rundense_near_core,1,76,2074.531,27.3082,12.2295,None,0,238,61,0.174,
+Town07__dynamic_v3fix__rundense_near_core,2,76,193122110087.943,33589990.1432,None,960866.034,0,237,35,0.600,DIFFER

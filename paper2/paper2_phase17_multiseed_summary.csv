@@ -1,0 +1,4 @@
+policy,n_seeds,full_state_count_mean,position_only_count_mean,invalid_velocity_count_mean,unobservable_count_mean,high_cost_count_mean,D1_valid_velocity_retained_mean,D2_wrong_velocity_accepted_mean,D0_static_wrongly_predicted_mean,max_risk_mean,full_state_count_std,position_only_count_std,invalid_velocity_count_std,unobservable_count_std,high_cost_count_std,D1_valid_velocity_retained_std,D2_wrong_velocity_accepted_std,D0_static_wrongly_predicted_std,max_risk_std
+always_full,5,120.0,75.0,0.0,0.0,0.0,65.0,55.0,0.0,0.1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+distance_gate,5,149.0,43.0,0.0,0.0,0.0,64.0,21.0,64.0,0.1,1.265,1.265,0.0,0.0,0.0,0.0,1.265,0.0,0.0
+ours,5,64.2,74.2,31.6,22.6,22.6,64.2,0.0,0.0,0.9,0.4,0.4,1.497,1.744,1.744,0.4,0.0,0.0,0.0
