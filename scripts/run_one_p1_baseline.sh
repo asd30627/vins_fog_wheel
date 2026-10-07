@@ -196,10 +196,18 @@ p_text = player_template.read_text()
 p_text = replace_seq_placeholders(p_text)
 p_text = set_yaml_string(p_text, "dataset_root", seq_root)
 p_text = set_yaml_string(p_text, "imu_source", player_imu_source)
+grade_override = r"${GRADE:-}"
+if grade_override and grade_override != "kaist_real_005":
+    p_text = set_yaml_string(p_text, "fog_csv", f"data/{seq_basename}/sensor_data/fog_grade_{grade_override}.csv")
+    print(f"[INFO] FOG GRADE override    = fog_grade_{grade_override}.csv")
 image_root_override = r"${IMAGE_ROOT_OVERRIDE:-}"
 if image_root_override:
     p_text = set_yaml_string(p_text, "image_root", image_root_override)
     print(f"[INFO] IMAGE_ROOT override   = {image_root_override}")
+imu_csv_override = r"${IMU_CSV_OVERRIDE:-}"
+if imu_csv_override:
+    p_text = set_yaml_string(p_text, "imu_csv", imu_csv_override)
+    print(f"[INFO] IMU_CSV override      = {imu_csv_override}")
 def set_yaml_number(text: str, key: str, value: str) -> str:
     pattern = rf'^(\s*{re.escape(key)}\s*:\s*).*$'
     if re.search(pattern, text, flags=re.MULTILINE):
@@ -259,8 +267,10 @@ source "${VINS_WS}/install/setup.bash"
 # direct children of this script and die cleanly with kill (no orphan grandchildren).
 # =========================================================
 LOOP_BIN="${VINS_WS}/install/loop_fusion/lib/loop_fusion/loop_fusion_node"
-VINS_BIN="${VINS_WS}/install/vins/lib/vins/vins_node"
+# VINS_BIN_OVERRIDE: use a different vins_node (e.g. _wheel binary that has CARLA_SOFT_FAILURE). Default = gate binary.
+VINS_BIN="${VINS_BIN_OVERRIDE:-${VINS_WS}/install/vins/lib/vins/vins_node}"
 PLAYER_BIN="${VINS_WS}/install/kaist_player/lib/kaist_player/kaist_player_node"
+echo "[VINS_BIN] $VINS_BIN"
 
 "${LOOP_BIN}" "${TMP_VINS_CONFIG}" \
   --ros-args -p use_sim_time:=true \
